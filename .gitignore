@@ -1,5 +1,3 @@
-setup-projet-vscode.md
-
 __pycache__/
 *.py[cod]
 .venv/
@@ -7,3 +5,4 @@ __pycache__/
 instance/
 *.db
 .pytest_cache/
+docs/
