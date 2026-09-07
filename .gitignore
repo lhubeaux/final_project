@@ -1,1 +1,9 @@
 setup-projet-vscode.md
+
+__pycache__/
+*.py[cod]
+.venv/
+.env
+instance/
+*.db
+.pytest_cache/
