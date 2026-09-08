@@ -1,5 +1,5 @@
-
 import unicodedata
+
 def normalize(texte: str) -> str:
     texte = texte.strip("\ufeff")                               #enlève le caractère invisible du BOM
     texte = unicodedata.normalize("NFC", texte)                 #fusionne voyelle + accent

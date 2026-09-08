@@ -8,3 +8,19 @@
     <p>{{ texte }}</p>
   </div>
 {% endif %}
+
+{% if phrases %}
+  {% for paragraphe in phrases %}
+    {% for phrase in paragraphe %}
+      <p>{{ phrase }}</p>
+    {% endfor %}
+  {% endfor %}
+{% endif %}
+
+{% if tokens %}
+  {% for paragraphe in tokens %}
+    {% for phrase_tokens in paragraphe %}
+      <p>{{ phrase_tokens }}</p>
+    {% endfor %}
+  {% endfor %}
+{% endif %}
