@@ -1,0 +1,10 @@
+<form method="post" action="/analyze">
+  <textarea name="texte" rows="15" maxlength="20000">{{ texte or '' }}</textarea>
+  <button type="submit">Analyser</button>
+</form>
+{% if texte %}
+  <div>
+    <h2>Texte soumis</h2>
+    <p>{{ texte }}</p>
+  </div>
+{% endif %}

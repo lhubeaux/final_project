@@ -198,7 +198,7 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - [ ] Durcissement et parcours d'erreur
 - [ ] Écrans de configuration
 - [ ] Historique, export, jeu de règles anglais
-- [ ] Conteneurisation
+- [ ] Conteneurisation *(bonus — non attendue dans l'évaluation)*
 
 ## Limites connues
 
@@ -213,4 +213,4 @@ Le dossier `docs/` — non versionné — rassemble les décisions de conception
 
 ## Licence
 
-À définir.
+[MIT](LICENSE). Les listes de mots et les jeux de règles sont couverts par la même licence ; leur origine est mentionnée avec le script d'amorce.
