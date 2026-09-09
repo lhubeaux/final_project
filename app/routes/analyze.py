@@ -11,15 +11,11 @@ def index():
 
 @bp.post("/analyze")
 def analyze():
-    text = request.form["texte"]
-    text = normalize(text)
-    phrases = segment(text)
+    texte = normalize(request.form["texte"])
+    paragraphes = segment(texte)
 
-    tokens = []
-    for paragraph in phrases:
-        para_tokens = []
-        for phrase in paragraph:
-            para_tokens.append(tokenize(phrase))
-        tokens.append(para_tokens)
-    return render_template("analyze/index.html", texte=text, phrases = phrases,tokens = tokens)
+    for paragraphe in paragraphes:
+        for phrase in paragraphe:
+            phrase["tokens"] = tokenize(phrase["texte"], phrase["start"])
 
+    return render_template("analyze/index.html", texte=texte, paragraphes=paragraphes)
