@@ -20,21 +20,22 @@
 
 <h1>Analyseur de langage clair</h1>
 
-<form method="post" action="/analyze">
-  <textarea name="texte" rows="10" cols="90" maxlength="20000">{{ texte or '' }}</textarea>
+
+<form method="post">
+  <textarea name="texte" rows="10" cols="90" maxlength="20000">{{ document.texte if document else '' }}</textarea>
   <p><button type="submit">Analyser</button></p>
 </form>
 
-{% if texte %}
-  <h2>Texte de référence — {{ texte | length }} caractères</h2>
+{% if document %}
+  <h2>Texte de référence — {{ document.texte | length }} caractères</h2>
   <p>
     C'est le texte <em>après</em> normalisation. Toutes les positions affichées plus bas
     sont des index dans cette chaîne-ci, et dans aucune autre.
   </p>
-  <pre>{{ texte }}</pre>
+  <pre>{{ document.texte }}</pre>
 
-  {% for paragraphe in paragraphes %}
-    <h3>Paragraphe {{ loop.index }}</h3>
+  {% for paragraphe in document.paragraphes %}
+    <h3>Paragraphe {{ loop.index }} <small>{{ paragraphe.start }}–{{ paragraphe.end }}</small></h3>
     <table>
       <tr>
         <th></th>
@@ -43,21 +44,21 @@
         <th>ce que la phrase transporte</th>
         <th>texte[start:end]</th>
       </tr>
-      {% for phrase in paragraphe %}
+      {% for phrase in paragraphe.phrases %}
         <tr>
           <td class="pos">{{ loop.index }}</td>
           <td class="pos">{{ phrase.start }}</td>
           <td class="pos">{{ phrase.end }}</td>
           <td><code>{{ phrase.texte | replace(' ', '·') | replace('\n', '⏎') }}</code></td>
-          <td class="{{ '' if texte[phrase.start:phrase.end] == phrase.texte else 'ko' }}">
-            <code>{{ texte[phrase.start:phrase.end] | replace(' ', '·') | replace('\n', '⏎') }}</code>
+          <td class="{{ '' if document.texte[phrase.start:phrase.end] == phrase.texte else 'ko' }}">
+            <code>{{ document.texte[phrase.start:phrase.end] | replace(' ', '·') | replace('\n', '⏎') }}</code>
           </td>
         </tr>
         <tr>
           <td></td>
           <td colspan="4">
             {% for token in phrase.tokens %}
-              <span class="tok {{ '' if texte[token.start:token.end] == token.texte else 'ko' }}"><code>{{ token.texte }}</code><small> {{ token.start }}–{{ token.end }}</small></span>
+              <span class="tok {{ '' if document.texte[token.start:token.end] == token.texte else 'ko' }}"><code>{{ token.texte }}</code><small> {{ token.start }}–{{ token.end }}</small></span>
             {% endfor %}
           </td>
         </tr>
@@ -65,6 +66,3 @@
     </table>
   {% endfor %}
 {% endif %}
-
-</body>
-</html>

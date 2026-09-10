@@ -28,6 +28,12 @@ def segment(texte: str) -> list[list[dict]]:
                                                         # span.start = position de la phrase dans le paragraphe
                 "end": bloc.start() + span.end,         # idem pour la fin de phrase
             })
-        paragraphes.append(phrases)
+
+        paragraphes.append({
+            "texte": bloc.group(),
+            "start": bloc.start(),
+            "end": bloc.end(),
+            "phrases": phrases,
+        })
 
     return paragraphes
