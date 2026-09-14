@@ -1,0 +1,222 @@
+# Environnement de développement
+
+*Mise à jour : 7 septembre 2026 — **phase 0 terminée**.*
+
+*Ce document dit **comment le projet tourne**. Les décisions de conception sont dans [synthese-projet-langage-clair.md](synthese-projet-langage-clair.md), le calendrier dans [plan-de-travail.md](plan-de-travail.md).*
+
+---
+
+## 1. Le choix : venv local
+
+**Environnement virtuel local pour développer. Conteneurisation en phase 3, si le temps le permet.** *(Décision D-13.)*
+
+C'est le choix qui coûte le moins de temps. Développer dans un conteneur suppose de régler la question de l'interpréteur côté éditeur, le montage du code, le rechargement automatique et les événements de fichier sous Windows — une demi-journée dans le meilleur des cas, pour une catégorie de problèmes qui n'a rien à voir avec le sujet du projet.
+
+L'application ne change pas d'un environnement à l'autre : une application Flask qui lit sa configuration dans des variables d'environnement s'exécute à l'identique dans un venv ou dans un conteneur.
+
+---
+
+## 2. État vérifié
+
+| Élément | Valeur |
+|---|---|
+| Python | 3.14.4 |
+| Emplacement | `C:\Users\louis\Documents\PythonFS\final_project` |
+| Environnement | `.venv` local |
+| Dépendances | installées, modèle spaCy français compris |
+| Tests | `pytest` découvert par VS Code, suite au vert |
+
+**Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1.
+
+> **Le risque d'installation de spaCy est écarté.** Le modèle français s'importe et s'exécute. C'est un point d'ordonnancement : le plan initial différait spaCy pour limiter ce risque, qui n'existe plus. Voir [plan-de-travail.md](plan-de-travail.md), principe 3.
+
+### Note sur Python 3.14
+
+Version récente, et spaCy publie bien une roue `cp314` — vérifié. Si une dépendance ajoutée plus tard refuse de s'installer faute de roue compilée pour 3.14, la solution est un venv en 3.12 plutôt qu'une compilation locale. Aucun signe de ce problème pour l'instant.
+
+### Note sur Windows
+
+Le dépôt est sur `C:`, ce qui est **correct** ici : le développement est natif Windows, il n'y a pas de frontière WSL à traverser. L'avertissement classique sur `/mnt/c/…` ne vaut que si l'on développe *sous* WSL ou dans un conteneur — ce n'est pas le cas. **Ne pas déplacer le dépôt.**
+
+---
+
+## 3. Repartir de zéro
+
+Sur une autre machine, ou après un `git clone` :
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+Puis renseigner `SECRET_KEY` dans `.env` :
+
+```powershell
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Et lancer :
+
+```powershell
+flask run
+```
+
+**Deux pièges rencontrés :**
+
+- Si l'activation est refusée par la politique d'exécution PowerShell : `Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned`. L'invite affiche `(.venv)` quand c'est actif.
+- **Sous Git Bash, c'est `source .venv/Scripts/activate`**, pas `bin/activate`. Le chemin `bin/` n'existe que pour un venv créé sous Linux.
+
+---
+
+## 4. Arborescence
+
+*Le raisonnement derrière ce découpage est dans la synthèse, décisions D-8 et D-9.*
+
+```
+final_project/
+├── .vscode/
+│   └── settings.json          # découverte des tests par pytest
+├── app/
+│   ├── __init__.py            # fabrique d'application
+│   ├── config.py              # configuration par variables d'environnement
+│   ├── models.py              # toutes les entités
+│   ├── repositories.py        # accès aux données
+│   ├── cli.py                 # commandes : seed, retokenize
+│   ├── routes/
+│   │   ├── analyze.py         # saisie, résultats
+│   │   └── admin.py           # règles, listes de mots, historique
+│   ├── services/
+│   │   ├── extraction/
+│   │   │   ├── registry.py    # interface commune + enregistrement
+│   │   │   ├── txt.py
+│   │   │   ├── docx.py
+│   │   │   ├── odt.py
+│   │   │   └── md.py
+│   │   ├── normalization.py   # encodage, NFC, apostrophes, paragraphes
+│   │   ├── segmentation.py
+│   │   ├── tokenization.py
+│   │   ├── linguistics.py     # unique point de contact avec spaCy
+│   │   └── rules/
+│   │       ├── base.py        # classe Rule, dataclass Finding
+│   │       ├── runner.py      # exécution, filtrage par langue
+│   │       ├── fr.py
+│   │       └── en.py
+│   ├── templates/
+│   └── static/
+├── data/seeds/                # listes de mots versionnées
+├── scripts/
+│   └── fetch_wordlists.py     # script ponctuel, hors application
+├── tests/
+├── migrations/                # généré par flask db init
+├── instance/                  # base SQLite locale — non versionnée
+├── docs/                      # non versionné
+├── .env.example
+├── .env                       # non versionné
+├── .gitattributes
+├── .gitignore
+├── requirements.txt
+├── Dockerfile                 # phase 3, si le temps le permet
+├── LICENSE                    # à choisir
+└── README.md
+```
+
+Les fichiers `.py` de cette arborescence existent et sont vides : ils se remplissent au fil des phases. Les `.gitkeep` de `templates/`, `static/`, `data/seeds/` et `scripts/` ne servent qu'à faire suivre les dossiers vides par git — à supprimer quand ces dossiers auront du contenu.
+
+---
+
+## 5. Fichiers de configuration
+
+### `requirements.txt`
+
+```
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+python-dotenv
+charset-normalizer
+python-docx
+odfpy
+pysbd
+defusedxml
+spacy
+https://github.com/explosion/spacy-models/releases/download/fr_core_news_sm-3.8.0/fr_core_news_sm-3.8.0-py3-none-any.whl
+pytest
+```
+
+**Le modèle spaCy est épinglé par URL.** Une installation ordinaire le récupère comme n'importe quelle autre dépendance — dans le venv aujourd'hui, dans l'image Docker en phase 3, sur un hébergeur en cas de mise en ligne. Une ligne qui évite une soirée de perplexité.
+
+*Si `fr_core_news_md` s'avère meilleur en phase 2 (voir le plan), c'est cette ligne, et elle seule, qui change.*
+
+### `.env.example`
+
+```
+FLASK_APP=app
+FLASK_DEBUG=1
+SECRET_KEY=changez-moi
+DATABASE_URL=sqlite:///instance/analyseur.db
+MAX_TEXT_LENGTH=20000
+MAX_UPLOAD_BYTES=2097152
+```
+
+Versionner `.env.example`, jamais `.env`. Celui qui clone copie l'un vers l'autre, et le README le dit.
+
+`MAX_UPLOAD_BYTES` alimente `MAX_CONTENT_LENGTH`, que **Flask applique lui-même** avant que le code ne voie la requête. `MAX_TEXT_LENGTH` est propre au projet et sert à valider le formulaire.
+
+### `.gitignore`
+
+```
+__pycache__/
+*.py[cod]
+.venv/
+.env
+instance/
+*.db
+.pytest_cache/
+docs/
+```
+
+*Le motif `docs/` exclut ce dossier du dépôt. Voir la remarque en fin de document.*
+
+### `.gitattributes`
+
+```
+* text=auto eol=lf
+```
+
+Évite que des fins de ligne CRLF se glissent dans des fichiers destinés à être lus sous Linux. À committer **en premier** dans un dépôt : la règle ne s'applique qu'aux fichiers indexés après elle.
+
+---
+
+## 6. VS Code
+
+L'essentiel tient en trois gestes, tous effectués :
+
+1. Extension **Python** installée (Pylance vient avec).
+2. Interpréteur `.venv` sélectionné — palette de commandes, *Python: Select Interpreter*.
+3. Découverte des tests activée — *Python: Configure Tests* → pytest → dossier `tests`. Le résultat est dans `.vscode/settings.json`, versionné : celui qui clone hérite de la configuration.
+
+**Faire le geste 2 avant d'écrire du code**, pas après. Sinon Pylance reste sur le Python global : aucune autocomplétion sur `flask`, et un avertissement d'import non résolu sur chaque ligne.
+
+Deux extensions de confort : **Jinja** pour la coloration des gabarits, **SQLite Viewer** pour inspecter la base sans quitter l'éditeur.
+
+Le reste — formatage, linter, configuration de débogage — peut attendre le jour où il manque. Ce n'est pas de la structure, c'est du confort, et le confort s'ajoute en cours de route sans rien casser.
+
+---
+
+## 7. Remarque : `docs/` est exclu du dépôt
+
+Le dossier `docs/` est dans `.gitignore`, donc invisible sur GitHub.
+
+C'est cohérent pour `theorie.md`, qui est un mémo de révision personnel. Ça l'est moins pour la synthèse des décisions : c'est précisément le document qui montre qu'une réflexion a précédé le code — formats refusés avec leurs raisons, rejet du score sur 100, arbitrage sur les règles proportionnelles. C'est ce qu'un jury ou un recruteur cherche et trouve rarement.
+
+Pour versionner la synthèse seule :
+
+```
+docs/
+!docs/synthese-projet-langage-clair.md
+```
+
+**Décision à prendre**, pas encore tranchée.
