@@ -1,0 +1,42 @@
+/* Feuille de style de l'analyseur — mode sombre.
+
+   Une ligne mark.r-<id> par règle d'analyse : sans elle le surlignage est
+   invisible, mark.signalement ne posant aucun fond. */
+
+:root      { color-scheme: dark; }
+body      { font-family: system-ui, sans-serif; margin: 2rem; max-width: 72rem;
+            background: #16191d; color: #e4e4e4; }
+textarea  { width: 100%; font-family: inherit; background: #1e2228; color: #e4e4e4;
+            border: 1px solid #3a4048; border-radius: 4px; padding: .5rem; }
+button    { background: #2d3239; color: #e4e4e4; border: 1px solid #4a515a;
+            border-radius: 4px; padding: .4rem .9rem; cursor: pointer; }
+button:hover { background: #3a4048; }
+.colonnes { display: flex; gap: 1.5rem; align-items: flex-start; }
+.texte    { flex: 3; background: #1e2228; padding: 1rem; white-space: pre-wrap;
+            line-height: 1.6; border-radius: 4px; }
+.liste    { flex: 2; }
+.resume   { list-style: none; padding: 0; margin: -.3rem 0 1rem;
+            color: #9aa2ac; font-size: .85rem; }
+.resume strong { color: #e4e4e4; font-variant-numeric: tabular-nums; }
+mark      { color: inherit; }
+mark.signalement            { background: none; cursor: pointer;}
+mark.r-longueur_phrase      { background: #007491; }
+mark.r-connecteurs_lourds   { text-decoration: underline wavy #e08a4a; }
+.fiche    { border: 1px solid #343a42; border-left: 4px solid #e0a800;
+            background: #1e2228; padding: .5rem .75rem; margin-bottom: .6rem;
+            cursor: pointer; transition: background .15s, border-color .15s; }
+.fiche h4 { margin: 0 0 .25rem; font-size: .95rem; }
+.principe { color: #9aa2ac; font-size: .85rem; }
+.vide     { color: #4ec99a; }
+details   { margin-top: 2rem; }
+table     { border-collapse: collapse; width: 100%; }
+th, td    { border: 1px solid #343a42; padding: .25rem .5rem; text-align: left;
+            vertical-align: top; }
+th        { background: #242930; }
+code      { font-family: ui-monospace, Consolas, monospace; }
+.pos      { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ko       { background: #5a1f24; color: #ffd7d7; font-weight: bold; }
+small     { color: #8d949d; font-variant-numeric: tabular-nums; }
+.tok      { display: inline-block; margin-right: .7rem; }
+.fiche.active  { border-left-color: #7fb3ff; background: #262f3a; }
+mark.active    { outline: 2px solid #e72dff; outline-offset: 1px; border-radius: 2px; }

@@ -1,6 +1,10 @@
+import re
+
 from app.services.document import Document
 from app.services.rules.base import Finding, Rule
 from app.services.rules.runner import enregistrer
+from app.services.rules.seuils import seuil
+from app.services.rules.lexiques import connecteurs_lourds
 
 
 @enregistrer
@@ -10,22 +14,72 @@ class LongueurPhrase(Rule):
     id = "longueur_phrase"
     hint = "P4 — faire court et simple"
     severity = "avertissement"
-    langues = ("fr",)
 
-    seuils = {"fr": 25, "en": 21}          # D-11 : une phrase française est plus longue
+    def s_applique_a(self, langue: str) -> bool:
+        """Applicable partout où un seuil est défini — pas de liste à maintenir."""
+        return seuil(self.id, langue) is not None
 
     def check(self, document: Document) -> list[Finding]:
-        seuil = self.seuils[document.langue]
+        maximum = seuil(self.id, document.langue)
         findings = []
 
         for phrase in document.phrases:
             mots = len(phrase.tokens)
-            if mots > seuil:
+            if mots > maximum:
                 findings.append(self.signaler(
                     phrase.start,
                     phrase.end,
-                    f"Phrase de {mots} mots (seuil : {seuil}). "
+                    f"Phrase de {mots} mots (seuil : {maximum}). "
                     f"Envisagez de la couper en deux.",
+                ))
+
+        return findings
+
+def _motif(expression: str) -> re.Pattern[str]:
+    """Transforme une expression du lexique en expression régulière.
+    « afin de » doit attraper « Afin de », « afin  de » et « afin d'appliquer »."""
+    mots = expression.split()                   # "afin de" -> ["afin", "de"]
+    mots = [re.escape(mot) for mot in mots]     # rend littéraux ' . etc.
+
+    if mots[-1] == "de":
+        mots[-1] = r"d(?:e\b|')"                # « de » ou sa forme élidée « d' »
+    else:
+        mots[-1] = mots[-1] + r"\b"             # sinon, fin de mot obligatoire
+
+    motif = r"\b" + r"\s+".join(mots)
+    return re.compile(motif, re.IGNORECASE)
+
+
+@enregistrer
+class ConnecteursLourds(Rule):
+    """Signale les locutions administratives qui ont un équivalent plus simple."""
+
+    id = "connecteurs_lourds"
+    hint = "P5 — choisir des mots simples"
+    severity = "info"
+
+    def s_applique_a(self, langue: str) -> bool:
+        """Applicable partout où un lexique existe — pas de liste à maintenir."""
+        return bool(connecteurs_lourds(langue))
+
+    def check(self, document: Document) -> list[Finding]:
+        lexique = connecteurs_lourds(document.langue)
+        findings = []
+        occupes: set[int] = set()     # caractères déjà pris par une expression plus longue
+
+        # Les expressions longues d'abord : « dans le cadre de » doit l'emporter
+        # sur une expression plus courte qu'il contiendrait.
+        for expression in sorted(lexique, key=len, reverse=True):
+            for match in _motif(expression).finditer(document.texte):
+                empan = range(match.start(), match.end())
+                if occupes.intersection(empan):
+                    continue
+                occupes.update(empan)
+                findings.append(self.signaler(
+                    match.start(),          # positions absolues par construction :
+                    match.end(),            # on balaie document.texte lui-même
+                    f"« {match.group()} » alourdit la phrase.",
+                    suggestion=lexique[expression],
                 ))
 
         return findings

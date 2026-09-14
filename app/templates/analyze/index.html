@@ -3,32 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Analyseur de langage clair</title>
-  <style>
-    body      { font-family: system-ui, sans-serif; margin: 2rem; max-width: 72rem; }
-    textarea  { width: 100%; font-family: inherit; }
-    .colonnes { display: flex; gap: 1.5rem; align-items: flex-start; }
-    .texte    { flex: 3; background: #f7f7f7; padding: 1rem; white-space: pre-wrap;
-                line-height: 1.6; border-radius: 4px; }
-    .liste    { flex: 2; }
-    mark.signalement            { background: none; }
-    mark.r-longueur_phrase      { background: #ffe9a8; }
-    mark.r-connecteurs_lourds   { text-decoration: underline wavy #d2691e; }
-    .fiche    { border: 1px solid #ddd; border-left: 4px solid #e0a800;
-                padding: .5rem .75rem; margin-bottom: .6rem; }
-    .fiche h4 { margin: 0 0 .25rem; font-size: .95rem; }
-    .principe { color: #666; font-size: .85rem; }
-    .vide     { color: #2a7; }
-    details   { margin-top: 2rem; }
-    table     { border-collapse: collapse; width: 100%; }
-    th, td    { border: 1px solid #ccc; padding: .25rem .5rem; text-align: left;
-                vertical-align: top; }
-    th        { background: #f0f0f0; }
-    code      { font-family: ui-monospace, Consolas, monospace; }
-    .pos      { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .ko       { background: #fdd; font-weight: bold; }
-    small     { color: #777; font-variant-numeric: tabular-nums; }
-    .tok      { display: inline-block; margin-right: .7rem; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
 
@@ -44,7 +19,14 @@
     <div class="texte">{{ texte_surligne }}</div>
 
     <div class="liste">
-      <h2>{{ findings | length }} signalement{{ 's' if findings | length > 1 else '' }}</h2>
+            <h2>{{ findings | length }} signalement{{ 's' if findings | length > 1 else '' }}</h2>
+
+      <ul class="resume">
+        {% for libelle, compte in resume %}
+          <li><strong>{{ compte }}</strong> · {{ libelle }}</li>
+        {% endfor %}
+      </ul>
+
 
       {% if not findings %}
         <p class="vide">Aucun défaut détecté par les règles actives.</p>
@@ -64,7 +46,7 @@
   </div>
 
   <details>
-    <summary>Structure du texte ({{ document.texte | length }} caractères,
+        <summary>Diagnostic technique — positions ({{ document.texte | length }} caractères,
       {{ document.paragraphes | length }} paragraphes,
       {{ document.phrases | length }} phrases,
       {{ document.tokens | length }} tokens)</summary>
@@ -100,5 +82,6 @@
   </details>
 {% endif %}
 
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

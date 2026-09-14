@@ -5,5 +5,4 @@ __pycache__/
 instance/
 *.db
 .pytest_cache/
-docs/
 todo.md
