@@ -54,7 +54,8 @@ app/
 ├── repositories.py        accès aux données — aucune linguistique     (vide)
 ├── cli.py                 commandes seed, retokenize                  (vide)
 ├── routes/
-│   └── analyze.py         GET/POST /
+│   ├── analyze.py         GET/POST /
+│   └── admin.py           écrans de configuration                     (vide)
 ├── static/
 │   ├── css/style.css      feuille unique, mode sombre
 │   └── js/app.js          lien surlignage ↔ fiche
@@ -65,16 +66,18 @@ app/
     ├── segmentation.py    paragraphes puis phrases (pysbd)
     ├── tokenization.py    \S+ avec report de position
     ├── rendering.py       surligner() — échappement puis balisage
-    ├── linguistics.py     point de contact unique avec spaCy
+    ├── linguistics.py     point de contact unique avec spaCy, TokenLinguistique
     ├── extraction/        registre + un module par format             (vide)
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (classe abstraite)
         ├── runner.py      registre plat, enregistrer / regles / run
         ├── seuils.py      données : seuils numériques par langue
-        ├── lexiques.py    données : listes de mots par langue
-        ├── fr.py          LongueurPhrase · ConnecteursLourds
+        ├── lexiques.py    données : connecteurs, verbes conjugués avec être
+        ├── fr.py          LongueurPhrase · ConnecteursLourds · Passif
         └── en.py          (vide)
 ```
+
+Le détail de chaque module est dans `guide-des-modules-python.md`.
 
 ### Les trois frontières à ne pas franchir
 
@@ -83,8 +86,8 @@ app/
    `pytest tests/test_rules.py` sans base de données ni serveur.
 2. **Le repository ne fait pas de linguistique.** Il traduit des objets en lignes de
    table, rien de plus.
-3. **Aucune règle n'importe spaCy** (D-7). Quand il arrivera, il sera derrière
-   `services/linguistics.py`, et lui seul.
+3. **Aucune règle n'importe spaCy** (D-7). Seul `services/linguistics.py` l'importe ; il
+   traduit chaque token en `TokenLinguistique`, et les règles lisent `Sentence.analyse`.
 
 ---
 
@@ -95,9 +98,10 @@ texte brut
   └─ normalisation      BOM · CRLF · NFC · soft hyphen · apostrophes · insécables
       └─ segmentation   paragraphes, puis phrases (pysbd), sans franchir les blocs
           └─ tokenisation   \S+, position reportée
-              └─ Document   paragraphes · phrases · tokens
-                  └─ règles   -> liste de Finding
-                      └─ surlignage   <mark> par empan
+              └─ analyse spaCy   chaque phrase séparément -> Sentence.analyse
+                  └─ Document   paragraphes · phrases · tokens · analyse
+                      └─ règles   -> liste de Finding
+                          └─ surlignage   <mark> par empan
 ```
 
 Un seul point d'entrée : `build_document(texte_brut, langue="fr")`. La normalisation s'y
@@ -175,8 +179,8 @@ ligne de couleur dans `style.css`.
 ### Les langues, et l'extension aux 24 langues de l'UE
 
 Le registre est plat : une fois `fr.py` et `en.py` importés, plus rien ne dit d'où vient
-une règle. `Rule.s_applique_a(langue)` porte donc l'information — mais les deux règles
-livrées ne déclarent aucune liste de langues, elles la déduisent de leur donnée :
+une règle. `Rule.s_applique_a(langue)` porte donc l'information. Les deux règles fondées
+sur des données ne déclarent aucune liste de langues, elles la déduisent de leur donnée :
 
 ```python
 return seuil(self.id, langue) is not None        # LongueurPhrase
@@ -187,12 +191,16 @@ Ajouter une langue, c'est ajouter une entrée dans `seuils.py` ou `lexiques.py`.
 ligne de code ne change. C'est aussi ce qui rend le `KeyError` structurellement
 impossible : une règle ne peut pas s'exécuter sur une langue dont elle n'a pas la donnée.
 
-### Les deux règles livrées
+La règle `Passif`, elle, dépend de l'analyse grammaticale : elle déclare explicitement
+`langues = ("fr",)` et le comportement par défaut de `s_applique_a()` suffit.
+
+### Les trois règles livrées
 
 | Règle | Principe | Sévérité | Mécanisme |
 |---|---|---|---|
 | `longueur_phrase` | P4 — faire court et simple | avertissement | compte les tokens de chaque phrase, compare au seuil de la langue (25 en français, 21 en anglais) |
 | `connecteurs_lourds` | P5 — choisir des mots simples | info | seize locutions administratives, chacune avec sa reformulation |
+| `passif` | P8 — préciser qui fait quoi | info avec agent, avertissement sans agent | `aux:pass` ou `cop` dans `Sentence.analyse`, exclusion des verbes conjugués avec *être*, recherche d'un `obl:agent` |
 
 `_motif()` compile une expression du lexique en expression régulière tolérante :
 `\s+` entre les mots, `re.IGNORECASE`, `\b` aux deux bouts, et un « de » final qui
@@ -202,6 +210,23 @@ attrape aussi sa forme élidée « d' ».
 _motif("afin de").pattern       # \bafin\s+d(?:e\b|')
 _motif("nonobstant").pattern    # \bnonobstant\b
 ```
+
+### La règle du passif
+
+1. Parcourir `phrase.analyse` et retenir un token `aux:pass`, ou `cop` : sans complément
+   d'agent, le modèle étiquette souvent ainsi l'auxiliaire du passif.
+2. Son gouverneur est le participe. S'il n'est pas étiqueté `VERB`, c'est un attribut
+   (« est **susceptible** », « est **nécessaire** », « est **médecin** ») : pas un passif.
+3. Si le lemme du participe figure dans `verbes_conjugues_avec_etre(document.langue)`
+   (*aller*, *venir*, *partir*…), ce n'est pas un passif.
+4. Chercher un dépendant `obl:agent` du participe : présent, sévérité `info` ; absent,
+   sévérité `avertissement`, parce que le lecteur ne sait pas qui agit.
+5. L'empan va du premier auxiliaire du participe jusqu'au participe : « a été prise ».
+
+Mesure de référence (D-14), sur les six phrases de référence : les dépendances seules
+obtiennent 2 sur 6, la règle actuelle 4 sur 6. Les deux échecs restants sont « La porte
+est ouverte » et « Il est convaincu », où spaCy étiquette le participe `VERB`.
+`fr_core_news_md` n'a montré aucun gain sur sept phrases.
 
 ---
 
@@ -248,23 +273,25 @@ Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
 ## 8. Tests
 
 ```powershell
-pytest                                  # toute la suite
-pytest tests/test_rules.py -v           # le moteur seul, sans base ni serveur
-pytest tests/test_passif.py -v          # la règle du passif seule
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider                          # toute la suite
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_rules.py -v   # le moteur seul
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_passif.py -v  # le passif seul
 ```
 
 | Fichier | Ce qu'il garantit |
 |---|---|
 | `test_positions.py` | l'invariant sur les paragraphes, les phrases et les tokens ; le cas du texte vide |
-| `test_rules.py` | les deux règles, l'empan de chaque signalement, l'absence de faux positif au milieu d'un mot, et qu'une langue non couverte ne fait rien planter |
+| `test_rules.py` | longueur de phrase et connecteurs lourds, l'empan de chaque signalement, l'absence de faux positif au milieu d'un mot, l'enregistrement des trois règles, le tri des signalements par position, et qu'une langue non couverte ne fait rien planter |
 | `test_smoke.py` | la route `/health` répond |
-| `test_passif.py` | les passifs avec ou sans agent, le faux positif « Elle est allée », et le cas ambigu `xfail` |
+| `test_passif.py` | les passifs avec ou sans agent (empan et sévérité), le passif au futur, les faux positifs « Elle est allée » et attributs adjectivaux (« est susceptible », « est nécessaire »), l'invariant des positions sur `Sentence.analyse`, et le cas ambigu « La porte est ouverte » en `xfail` ; le modèle spaCy est chargé par une fixture de portée `session` |
 
 `test_rules.py` n'importe ni `create_app` ni `db` : c'est la démonstration concrète que le
 moteur est isolé de la base.
 
+État au 15 septembre : 19 tests passent, plus le `xfail` assumé, en moins de 5 secondes.
+
 **Manque encore** : `test_normalization.py`, qui doit couvrir les six transformations de
-`normalize()`.
+`normalize()` ; les tests de validation serveur et d'import de fichiers.
 
 ---
 
@@ -285,7 +312,14 @@ moteur est isolé de la base.
 fichiers, tokenisation fine, deux règles de plus.
 - ✅ spaCy analyse les phrases séparées par `pysbd` et projette ses tokens dans `Sentence.analyse`
 - ✅ règle `passif`, affichée par le mécanisme générique de surlignage
-- ⬜ import de fichiers, tokenisation fine, règles supplémentaires
+- ✅ comparaison `fr_core_news_sm` / `md` : aucun gain, `sm` conservé
+- ⬜ import de fichiers : registre d'extracteurs, `.txt`, `.md`, `.docx`, puis `.odt`
+- ⬜ tokenisation fine, règles supplémentaires
+
+- ✅ jeu d'essai du passif complété ; attributs adjectivaux exclus
+
+**Prochaine priorité** : implémenter l'import de fichiers, puis la validation serveur (texte vide, longueur maximale, format refusé, taille de fichier,
+fichier corrompu).
 
 **Phase 3** (→ jeu 24/09) : durcissement, documentation, écrans de configuration, puis
 historique / export / anglais / conteneurisation.
@@ -309,7 +343,13 @@ surlignage, détection du passif, durcissement, journée de répétition.
 - « s'agissant **des** pièces » n'est pas détecté — `des` n'est ni `de` ni `d'`. Le lexique
   traite des locutions figées, pas la morphologie.
 - La tokenisation est un `\S+` : la ponctuation reste collée au mot. Suffisant pour
-  compter, remplacé par la tokenisation spaCy en phase 2.
+  compter ; la tokenisation fine reste à faire.
+- « La porte est ouverte » et « Il est convaincu » peuvent être signalés comme passifs :
+  spaCy étiquette le participe `VERB`, et état et passif restent ambigus pour cette
+  heuristique.
+- La route n'enregistre pas les analyses en base ; l'import de fichiers n'existe pas encore.
+- Le champ `Document.spacy_doc` subsiste mais n'est pas utilisé : les règles lisent
+  `Sentence.analyse`.
 - Le surlignage n'est cliquable qu'à la souris. Le rendre accessible au clavier demande un
   `tabindex` posé dans `rendering.py`.
 - Le lexique compte seize entrées : un échantillon représentatif, pas un inventaire.

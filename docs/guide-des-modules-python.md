@@ -249,7 +249,8 @@ Ce fichier contient les règles françaises enregistrées.
 - `ConnecteursLourds` recherche les expressions les plus longues d'abord. L'ensemble
   `occupes` empêche deux signalements concurrents sur les mêmes caractères.
 - `Passif` parcourt `phrase.analyse`. Il cherche `aux:pass` et le cas `cop` observé
-  par spaCy lorsque l'agent est absent, écarte les verbes de
+  par spaCy lorsque l'agent est absent, écarte les gouverneurs qui ne sont pas
+  des `VERB` (attributs comme « est susceptible »), écarte les verbes de
   `verbes_conjugues_avec_etre(document.langue)`, puis cherche un dépendant
   `obl:agent`. Un agent explicite produit une information ; son absence produit
   un avertissement. L'empan couvre le groupe auxiliaire et le participe.

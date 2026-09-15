@@ -111,8 +111,13 @@ class Passif(Rule):
 
                 participe = phrase.analyse[auxiliaire.gouverneur]
 
+                # « est susceptible », « est médecin » : attribut, pas participe
+                if participe.categorie != "VERB":
+                    continue
+
                 if participe.lemme in verbes_conjugues_avec_etre(document.langue):
                     continue
+
 
                 auxiliaires = [
                     token

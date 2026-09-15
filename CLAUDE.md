@@ -118,16 +118,21 @@ La documentation détaillée de chaque module est dans
 - Règles : `longueur_phrase`, `connecteurs_lourds`, `passif`.
 - Intégration spaCy : chaque phrase est analysée séparément puis projetée dans
   `Sentence.analyse`.
-- Règle du passif : `aux:pass` et repli `cop`, exclusion des verbes conjugués
-  avec *être*, agent `obl:agent`, sévérité plus haute sans agent.
+- Règle du passif : `aux:pass` et repli `cop`, participe obligatoirement `VERB`
+  (écarte « est susceptible », « est nécessaire »), exclusion des verbes
+  conjugués avec *être*, agent `obl:agent`, sévérité plus haute sans agent.
+  Score sur les six phrases de référence : 4 sur 6 (2 sur 6 avec les
+  dépendances seules).
 - Interface : le texte surligné reste visible pendant le défilement des fiches
   sur ordinateur ; une colonne sur mobile.
-- Tests : 15 passent ; « La porte est ouverte » est un `xfail` assumé.
+- Tests : 19 passent ; « La porte est ouverte » est un `xfail` assumé.
+  L'invariant des positions est aussi vérifié sur `Sentence.analyse`.
 
 ### Limites connues
 
 - « La porte est ouverte » et « Il est convaincu » peuvent être signalés comme
-  passifs : état et passif restent ambigus pour cette heuristique.
+  passifs : spaCy étiquette le participe `VERB`, état et passif restent
+  ambigus pour cette heuristique.
 - Tokenisation `\S+` : la ponctuation reste collée au mot.
 - La route n'enregistre pas encore les analyses en base.
 - Les extracteurs de fichiers, l'administration, les repositories et la CLI ne
@@ -135,12 +140,11 @@ La documentation détaillée de chaque module est dans
 
 ## Prochaine priorité
 
-1. Compléter les cas de `tests/test_passif.py` lorsque l'utilisateur est prêt à
-   exécuter les tests.
-2. Implémenter l'import de fichiers : registre d'extracteurs, `.txt`, `.md`,
+1. Implémenter l'import de fichiers : registre d'extracteurs, `.txt`, `.md`,
    `.docx`, puis `.odt`.
-3. Ajouter validation serveur : texte vide, longueur maximale, format refusé,
+2. Ajouter validation serveur : texte vide, longueur maximale, format refusé,
    taille de fichier et fichier corrompu.
+3. Ajouter `tests/test_normalization.py` pour les six transformations.
 4. Ensuite seulement : tokenisation fine, règles supplémentaires, configuration,
    historique et export.
 

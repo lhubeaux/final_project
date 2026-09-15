@@ -74,7 +74,7 @@ Détail et état exact dans [setup-projet-vscode.md](setup-projet-vscode.md).
 
 ### Contenu
 
-**Modèle de données — trois entités seulement.** `Document`, `Analysis`, `Finding`. Les quatre autres (`RuleSet`, `RuleConfig`, `WordList`, `WordEntry`) attendent la phase 2 : tant qu'il n'y a pas d'écran de configuration, elles ne servent à rien. Les listes de mots se lisent directement depuis les fichiers JSON de `data/seeds/`.
+**Modèle de données — trois entités seulement.** ✅ `DocumentRecord`, `Analysis`, `FindingRecord`, et leur migration (`app/models/`). Les quatre autres (`RuleSet`, `RuleConfig`, `WordList`, `WordEntry`) attendent la phase 2 : tant qu'il n'y a pas d'écran de configuration, elles ne servent à rien. Les listes de mots se lisent directement depuis les fichiers JSON de `data/seeds/`.
 
 **Normalisation.** ✅ Un seul service : NFC, apostrophes, espaces insécables, conservation des sauts de paragraphe. (`app/services/normalization.py`)
 
@@ -82,19 +82,21 @@ Détail et état exact dans [setup-projet-vscode.md](setup-projet-vscode.md).
 
 **Tokenisation grossière.** ✅ Découpage sur les espaces (`\S+` via `re.finditer`), avec positions char_start/char_end. (`app/services/tokenization.py`)
 
-**Route d'analyse.** ✅ POST `/analyze` enchaîne normalisation → segmentation → tokenisation et transmet les résultats au template. (`app/routes/analyze.py`)
+**Route d'analyse.** ✅ `POST /` appelle `build_document(texte_brut, langue="fr")`, exécute les règles et transmet le texte surligné au template. (`app/routes/analyze.py`)
 
-**Le moteur de règles.** Classe de base `Rule`, `Finding` en dataclass, registre, exécutant filtrant par langue.
+**Le moteur de règles.** ✅ Classe de base `Rule`, `Finding` en dataclass, registre, exécutant filtrant par langue. (`app/services/rules/`)
 
-> **À trancher dès maintenant, pas plus tard : ce que reçoit `check()`.** La réponse retenue est un objet `Document` maison portant paragraphes, phrases et tokens. En phase 2, ce même objet gagnera un attribut `.spacy_doc` optionnel — les règles déjà écrites ne changeront pas. *(Décision D-3 dans la synthèse.)*
+> **Tranché : ce que reçoit `check()`.** Un objet `Document` maison portant paragraphes, phrases et tokens. En phase 2, spaCy s'y est ajouté sous la forme de `Sentence.analyse` (et non d'un `.spacy_doc` brut) — les règles déjà écrites n'ont pas changé. *(Décision D-3 dans la synthèse.)*
 
-**Deux règles**, pas quatre : longueur de phrase (seuil) et connecteurs lourds (liste + remplacement). Elles suffisent à éprouver le moteur et produisent immédiatement des signalements sur un texte institutionnel réel.
+**Deux règles**, pas quatre : ✅ longueur de phrase (seuil) et connecteurs lourds (liste + remplacement). Elles suffisent à éprouver le moteur et produisent immédiatement des signalements sur un texte institutionnel réel.
 
 **Une tokenisation grossière** — ✅ voir ci-dessus.
 
-**L'écran de résultats.** Texte surligné à gauche, liste des signalements à droite. Échappement HTML **d'abord**, construction par segments entre frontières de signalements.
+**L'écran de résultats.** ✅ Texte surligné à gauche, liste des signalements à droite, lien dans les deux sens. Échappement HTML **d'abord**, construction par segments entre frontières de signalements.
 
-**Tests unitaires** sur les deux règles et sur la normalisation, sans base de données.
+**Tests unitaires** sur les deux règles ✅ et sur la normalisation ⬜, sans base de données.
+
+*Jalon du 11/09 atteint.*
 
 ### Ce qui n'est PAS en phase 1
 
@@ -112,7 +114,7 @@ L'import de fichiers. Une zone de texte suffit à boucler la chaîne, et l'extra
 
 **1. spaCy et la détection du passif.** C'est la pièce maîtresse de la soutenance, et elle passe avant tout le reste de la phase.
 
-*État au 15/09 : réalisé. `linguistics.py` analyse chaque phrase isolée et la règle `passif` est couverte par des tests ; la comparaison `fr_core_news_sm` / `md` sur sept phrases n'a montré aucun gain pour `md`.*
+*État au 15/09 : réalisé, points 1 et 2. `linguistics.py` analyse chaque phrase isolée et la règle `passif` est couverte par des tests ; la comparaison `fr_core_news_sm` / `md` sur sept phrases n'a montré aucun gain pour `md`. Jeu d'essai élargi (passif au futur, attributs adjectivaux) ; score de 4 sur 6 sur les phrases de référence. Prochaine étape : l'import de fichiers (point 3).*
 
 - Chargement du modèle **une seule fois** au démarrage, derrière `services/linguistics.py`.
 - **Le jeu d'essai d'abord, la règle ensuite.** Une vingtaine de phrases : passifs véritables, et faux positifs classiques (*elle est allée*, *la porte est ouverte*, *il est convaincu*).
@@ -124,7 +126,7 @@ L'import de fichiers. Une zone de texte suffit à boucler la chaîne, et l'extra
 
 **2. Passif sans agent exprimé**, signalé plus sévèrement — le lecteur ne peut alors pas savoir qui agit, ce qui est exactement le défaut visé.
 
-**3. Import de fichiers.** Registre d'extracteurs, `.txt` puis `.docx` puis `.odt`. Vérification des octets d'en-tête, `defusedxml`, plafond de taille. `.md` seulement si c'est trivial.
+**3. Import de fichiers.** Registre d'extracteurs, `.txt`, `.md`, `.docx`, puis `.odt`. Vérification des octets d'en-tête, `defusedxml`, plafond de taille. Chaque extracteur renvoie du texte brut qui passe ensuite par `build_document(texte_brut, langue="fr")`.
 
 **4. Tokenisation propre.** Élisions, traits d'union avec liste d'exceptions, abréviations, nombres. Numéro de version du tokeniseur et commande de retokenisation.
 

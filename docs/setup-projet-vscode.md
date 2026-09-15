@@ -1,6 +1,6 @@
 # Environnement de développement
 
-*Mise à jour : 7 septembre 2026 — **phase 0 terminée**.*
+*Mise à jour : 15 septembre 2026 — phase 2 en cours.*
 
 *Ce document dit **comment le projet tourne**. Les décisions de conception sont dans [synthese-projet-langage-clair.md](synthese-projet-langage-clair.md), le calendrier dans [plan-de-travail.md](plan-de-travail.md).*
 
@@ -24,7 +24,7 @@ L'application ne change pas d'un environnement à l'autre : une application Flas
 | Emplacement | `C:\Users\louis\Documents\PythonFS\final_project` |
 | Environnement | `.venv` local |
 | Dépendances | installées, modèle spaCy français compris |
-| Tests | `pytest` découvert par VS Code, suite au vert |
+| Tests | `pytest` découvert par VS Code ; 19 passent, plus un `xfail` assumé |
 
 **Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1. `fr_core_news_md` 3.8.0 est aussi présent pour comparaison, mais le projet utilise `sm` et seul ce dernier est épinglé dans `requirements.txt`.
 
@@ -61,7 +61,8 @@ python -c "import secrets; print(secrets.token_hex(32))"
 Et lancer :
 
 ```powershell
-flask run
+flask run                                                # http://127.0.0.1:5000
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider   # tests
 ```
 
 **Deux pièges rencontrés :**
@@ -80,50 +81,53 @@ final_project/
 ├── .vscode/
 │   └── settings.json          # découverte des tests par pytest
 ├── app/
-│   ├── __init__.py            # fabrique d'application
+│   ├── __init__.py            # fabrique d'application, /health
 │   ├── config.py              # configuration par variables d'environnement
-│   ├── models.py              # toutes les entités
-│   ├── repositories.py        # accès aux données
-│   ├── cli.py                 # commandes : seed, retokenize
+│   ├── models/                # DocumentRecord, Analysis, FindingRecord
+│   ├── repositories.py        # accès aux données (vide)
+│   ├── cli.py                 # commandes : seed, retokenize (vide)
 │   ├── routes/
 │   │   ├── analyze.py         # saisie, résultats
-│   │   └── admin.py           # règles, listes de mots, historique
+│   │   └── admin.py           # règles, listes de mots, historique (vide)
 │   ├── services/
-│   │   ├── extraction/
+│   │   ├── extraction/        # fichiers vides, prévus pour l'import
 │   │   │   ├── registry.py    # interface commune + enregistrement
 │   │   │   ├── txt.py
 │   │   │   ├── docx.py
 │   │   │   ├── odt.py
 │   │   │   └── md.py
-│   │   ├── normalization.py   # encodage, NFC, apostrophes, paragraphes
-│   │   ├── segmentation.py
-│   │   ├── tokenization.py
+│   │   ├── document.py        # dataclasses métier, build_document()
+│   │   ├── normalization.py   # BOM, fins de ligne, NFC, apostrophes, insécables
+│   │   ├── segmentation.py    # paragraphes et phrases (pysbd)
+│   │   ├── tokenization.py    # tokens grossiers avec positions
 │   │   ├── linguistics.py     # unique point de contact avec spaCy
+│   │   ├── rendering.py       # échappement HTML et surlignage
 │   │   └── rules/
 │   │       ├── base.py        # classe Rule, dataclass Finding
-│   │       ├── runner.py      # exécution, filtrage par langue
-│   │       ├── fr.py
-│   │       └── en.py
-│   ├── templates/
-│   └── static/
-├── data/seeds/                # listes de mots versionnées
-├── scripts/
-│   └── fetch_wordlists.py     # script ponctuel, hors application
-├── tests/
-├── migrations/                # généré par flask db init
+│   │       ├── runner.py      # registre, exécution, filtrage par langue
+│   │       ├── seuils.py      # seuils par langue
+│   │       ├── lexiques.py    # listes de mots par langue
+│   │       ├── fr.py          # longueur_phrase, connecteurs_lourds, passif
+│   │       └── en.py          # (vide)
+│   ├── templates/analyze/index.html
+│   └── static/                # css/style.css, js/app.js
+├── data/seeds/                # listes de mots versionnées (vide)
+├── scripts/                   # futur script d'amorce, hors application (vide)
+├── tests/                     # positions, règles, passif, smoke
+├── migrations/                # Alembic, première migration écrite
 ├── instance/                  # base SQLite locale — non versionnée
-├── docs/                      # non versionné
+├── docs/                      # documentation du projet, versionnée
 ├── .env.example
 ├── .env                       # non versionné
 ├── .gitattributes
 ├── .gitignore
 ├── requirements.txt
-├── Dockerfile                 # phase 3, si le temps le permet
-├── LICENSE                    # à choisir
+├── Dockerfile                 # phase 3, si le temps le permet (absent)
+├── LICENSE                    # MIT
 └── README.md
 ```
 
-Les fichiers `.py` de cette arborescence existent et sont vides : ils se remplissent au fil des phases. Les `.gitkeep` de `templates/`, `static/`, `data/seeds/` et `scripts/` ne servent qu'à faire suivre les dossiers vides par git — à supprimer quand ces dossiers auront du contenu.
+Les fichiers marqués *(vide)* existent déjà et se remplissent au fil des phases. Les `.gitkeep` de `data/seeds/` et `scripts/` servent à faire suivre ces dossiers vides par git. Ceux de `templates/` et `static/` peuvent être supprimés, puisque ces dossiers ont maintenant du contenu.
 
 ---
 
@@ -175,10 +179,10 @@ __pycache__/
 instance/
 *.db
 .pytest_cache/
-docs/
+todo.md
 ```
 
-*Le motif `docs/` exclut ce dossier du dépôt. Voir la remarque en fin de document.*
+*`docs/` n'est plus exclu : la documentation est versionnée. Seul `todo.md` reste local.*
 
 ### `.gitattributes`
 
@@ -206,17 +210,8 @@ Le reste — formatage, linter, configuration de débogage — peut attendre le 
 
 ---
 
-## 7. Remarque : `docs/` est exclu du dépôt
+## 7. Versionnement de `docs/`
 
-Le dossier `docs/` est dans `.gitignore`, donc invisible sur GitHub.
+**Tranché : `docs/` est versionné.** La synthèse des décisions montre qu'une réflexion a précédé le code : formats refusés avec leurs raisons, rejet du score sur 100, arbitrage sur les règles proportionnelles. C'est ce qu'un jury ou un recruteur cherche et trouve rarement.
 
-C'est cohérent pour `theorie.md`, qui est un mémo de révision personnel. Ça l'est moins pour la synthèse des décisions : c'est précisément le document qui montre qu'une réflexion a précédé le code — formats refusés avec leurs raisons, rejet du score sur 100, arbitrage sur les règles proportionnelles. C'est ce qu'un jury ou un recruteur cherche et trouve rarement.
-
-Pour versionner la synthèse seule :
-
-```
-docs/
-!docs/synthese-projet-langage-clair.md
-```
-
-**Décision à prendre**, pas encore tranchée.
+`theorie.md` et `soutenance.md` sont des mémos personnels. Ils peuvent rester dans le dépôt ou être ajoutés à `.gitignore` avant la livraison.

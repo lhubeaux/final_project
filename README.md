@@ -62,8 +62,10 @@ class Finding:
 ### Chaîne de traitement
 
 ```
-obtenir le texte  →  normaliser  →  segmenter  →  tokeniser  →  analyser
+obtenir le texte  →  normaliser  →  segmenter  →  tokeniser  →  analyser (spaCy)  →  règles  →  surligner
 ```
+
+Un seul point d'entrée, `build_document(texte_brut, langue="fr")`, normalise une fois ; le texte normalisé devient l'unique référence de toutes les positions. spaCy analyse chaque phrase découpée par `pysbd` séparément, et sa sortie est traduite en objets maison avant d'atteindre les règles.
 
 La normalisation s'applique aux **deux** chemins d'entrée. Un copier-coller depuis un traitement de texte apporte apostrophes courbes, espaces insécables et traits d'union conditionnels au même titre qu'un fichier importé.
 
@@ -71,20 +73,24 @@ La normalisation s'applique aux **deux** chemins d'entrée. Un copier-coller dep
 
 ```
 app/
-├── __init__.py            fabrique d'application
+├── __init__.py            fabrique d'application, route /health
 ├── config.py              configuration par variables d'environnement
-├── models.py              entités persistées
-├── repositories.py        accès aux données — aucune linguistique
-├── cli.py                 commandes : seed, retokenize
-├── routes/                analyze (utilisateur) · admin (configuration)
+├── models/                DocumentRecord · Analysis · FindingRecord
+├── repositories.py        accès aux données — aucune linguistique (à venir)
+├── cli.py                 commandes : seed, retokenize (à venir)
+├── routes/                analyze (utilisateur) · admin (configuration, à venir)
+├── templates/ · static/   page d'analyse, CSS, lien surlignage ↔ fiches
 └── services/
-    ├── extraction/        registre + un module par format
-    ├── normalization.py   encodage, NFC, apostrophes, paragraphes
-    ├── segmentation.py
-    ├── tokenization.py
+    ├── document.py        build_document() — seul point d'entrée du moteur
+    ├── normalization.py   BOM, fins de ligne, NFC, apostrophes, insécables
+    ├── segmentation.py    paragraphes puis phrases (pysbd)
+    ├── tokenization.py    tokens avec positions absolues
     ├── linguistics.py     unique point de contact avec spaCy
-    └── rules/             base · runner · fr · en
+    ├── rendering.py       échappement HTML puis surlignage
+    ├── extraction/        registre + un module par format (à venir)
+    └── rules/             base · runner · seuils · lexiques · fr · en
 data/seeds/                listes de mots versionnées
+migrations/                migrations Alembic
 tests/
 docs/                      décisions de conception, programme, théorie
 ```
@@ -95,7 +101,7 @@ Le découpage suit les axes qui grossissent réellement — les formats, les rè
 
 ## Installation
 
-Python 3.12 ou supérieur.
+Python 3.12 ou supérieur (développé et testé sous Python 3.14, Windows 11).
 
 ```bash
 git clone <url-du-depot>
@@ -133,7 +139,7 @@ L'application répond sur http://127.0.0.1:5000.
 ## Tests
 
 ```bash
-pytest
+python -m pytest -p no:cacheprovider
 ```
 
 Le moteur de règles ne connaît pas la base de données : sa suite de tests s'exécute en isolation, sans fixture de persistance.
@@ -162,7 +168,9 @@ C'est la règle la plus intéressante du projet, et celle qu'une expression rég
 | La porte est ouverte | description d'un état |
 | Il est convaincu | adjectif |
 
-La détection s'appuie sur les relations de dépendance `aux:pass` et `nsubj:pass` de spaCy, complétées par des heuristiques — notamment une liste des verbes intransitifs conjugués avec *être*, qui élimine toute la famille de *elle est allée*.
+La détection s'appuie sur la relation de dépendance `aux:pass` de spaCy, complétée par des heuristiques : l'étiquette `cop` est aussi retenue, parce que le modèle l'attribue à l'auxiliaire quand le complément d'agent manque ; le participe doit être étiqueté verbe, ce qui écarte les attributs comme *est susceptible* ; et une liste des verbes conjugués avec *être* élimine toute la famille de *elle est allée*. Le complément d'agent est repéré par la relation `obl:agent`.
+
+Mesuré avec `fr_core_news_sm` sur six phrases de référence : les dépendances seules en classent correctement 2, la règle avec ses heuristiques 4.
 
 Le passif **sans agent exprimé** est signalé plus sévèrement : le lecteur ne peut alors pas identifier qui agit, ce qui est précisément le défaut que vise le référentiel.
 
@@ -183,10 +191,11 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - [x] Fabrique d'application et route de santé
 
 **Phase 1 — La chaîne complète, en version minimale**
-- [ ] Modèle de données : `Document`, `Analysis`, `Finding`
-- [ ] Normalisation et segmentation
-- [ ] Moteur de règles et deux premières règles
-- [ ] Écran de résultats avec surlignage
+- [x] Modèle de données : `DocumentRecord`, `Analysis`, `FindingRecord` et leur migration
+- [x] Normalisation et segmentation
+- [x] Moteur de règles et deux premières règles (longueur de phrase, connecteurs lourds)
+- [x] Écran de résultats avec surlignage
+- [ ] Tests de la normalisation
 
 **Phase 2 — Analyse grammaticale**
 - [x] Intégration de spaCy et détection du passif
@@ -204,13 +213,16 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 
 - Un texte à la fois, sans traitement par lots.
 - Les suggestions se copient mais ne s'appliquent pas automatiquement : corriger le texte invaliderait toutes les positions affichées et supposerait de relancer l'analyse.
-- *La porte est ouverte* reste un cas ambigu que l'analyse grammaticale ne tranche pas — le français ne distingue pas formellement le passif d'état du passif d'action.
+- *La porte est ouverte* et *Il est convaincu* peuvent être signalés comme passifs : l'analyse grammaticale ne tranche pas, le français ne distinguant pas formellement le passif d'état du passif d'action.
+- La tokenisation actuelle découpe sur les espaces : la ponctuation reste collée au mot.
+- Les analyses ne sont pas encore enregistrées en base, et l'import de fichiers n'est pas encore branché.
+- La longueur maximale du texte n'est contrôlée que côté navigateur pour l'instant.
 - `fr_core_news_md` a été comparé à `fr_core_news_sm` sur le jeu d'essai du passif : aucun gain constaté. Le projet conserve donc le modèle léger, seul référencé dans `requirements.txt`.
 - Le chargement du modèle spaCy occupe quelques centaines de mégaoctets au démarrage.
 
 ## Documentation
 
-Le dossier `docs/` — non versionné — rassemble les décisions de conception, le programme de développement et un mémo théorique.
+Le dossier `docs/` rassemble la documentation technique, le guide des modules Python, l'intégration de spaCy, les décisions de conception, le plan de travail et un mémo théorique.
 
 ## Licence
 

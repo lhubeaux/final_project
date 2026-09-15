@@ -85,18 +85,18 @@ Elle est allée à Paris.
 Logique :
 
 1. Repérer un token `aux:pass`, ou `cop` dans le cas sans complément d'agent que le modèle étiquette ainsi.
-2. Son gouverneur est le participe.
+2. Son gouverneur est le participe. **Heuristique** — s'il n'est pas étiqueté `VERB`, c'est un attribut (« est susceptible », « est nécessaire ») → pas un passif.
 3. **Heuristique** — lemme du participe dans la liste des verbes conjugués avec *être* (aller, venir, partir, arriver, rester, tomber, naître, mourir, devenir…) → pas un passif.
 4. Aucun dépendant `obl:agent` → passif sans agent, sévérité plus haute.
 5. Empan : de l'auxiliaire au participe.
 
-Rappel (D-14) : `aux:pass` / `nsubj:pass` seuls obtiennent **2 sur 6** sur les phrases de référence. Les heuristiques portent la moitié du résultat. *La porte est ouverte* reste ambigu : limite à énoncer, pas bug à corriger.
+Rappel (D-14) : `aux:pass` / `nsubj:pass` seuls obtiennent **2 sur 6** sur les phrases de référence ; la règle avec ses heuristiques obtient **4 sur 6**. *La porte est ouverte* reste ambigu : limite à énoncer, pas bug à corriger.
 
 ---
 
 ## 6. Ordre de travail
 
-1. ✅ **Jeu d'essai** — `tests/test_passif.py` couvre deux passifs, le passé composé avec *être* et un cas ambigu `xfail`.
+1. ✅ **Jeu d'essai** — `tests/test_passif.py` couvre trois passifs (avec agent, sans agent, au futur), le passé composé avec *être*, deux attributs adjectivaux, l'invariant des positions sur `Sentence.analyse` et un cas ambigu `xfail`.
 2. ✅ **Fixture de portée session** pour le modèle : `@pytest.fixture(scope="session")`.
 3. ✅ **`linguistics.py`** — chargement unique, projection et positions absolues.
 4. ✅ **Rattachement** dans `build_document()`.

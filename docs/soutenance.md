@@ -1,7 +1,7 @@
 # Soutenance — aide-mémoire
 
 Analyseur de langage clair. État au 15 septembre 2026, phase 2 en cours.
-Ce document n'est pas versionné (`docs/` est dans `.gitignore`).
+Documentation technique complète : `documentation.md` et `guide-des-modules-python.md`.
 
 ---
 
@@ -24,9 +24,10 @@ texte brut
   └─ normalisation      BOM, CRLF, NFC, soft hyphen, apostrophes, insécables
       └─ segmentation   pysbd, sans franchir les paragraphes
           └─ tokenisation   \S+ avec offset
-              └─ Document   paragraphes · phrases · tokens
-                  └─ règles   -> Finding
-                      └─ surlignage   <mark> par empan
+              └─ analyse spaCy   phrase par phrase -> Sentence.analyse
+                  └─ Document   paragraphes · phrases · tokens · analyse
+                      └─ règles   -> Finding
+                          └─ surlignage   <mark> par empan
 ```
 
 Un seul point d'entrée : `build_document(texte_brut, langue="fr")`. La normalisation
@@ -85,14 +86,14 @@ app/
 ├── repositories.py        accès aux données — aucune linguistique  (vide à ce jour)
 ├── cli.py                 commandes seed, retokenize              (vide à ce jour)
 ├── routes/analyze.py      GET/POST /
-├── static/css/style.css
+├── static/                css/style.css · js/app.js
 ├── templates/analyze/index.html
 └── services/
     ├── document.py        build_document() — le seul point d'entrée
     ├── normalization.py · segmentation.py · tokenization.py
     ├── rendering.py       surligner()
     ├── linguistics.py     unique point de contact avec spaCy
-    ├── extraction/        registre + un module par format (phase 2)
+    ├── extraction/        registre + un module par format (à venir)
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (ABC)
         ├── runner.py      registre plat + run()
@@ -119,7 +120,7 @@ app/
 
 ## 5. Le moteur de règles
 
-Trois fichiers, et c'est tout.
+Trois fichiers de code, plus deux fichiers de données (`seuils.py`, `lexiques.py`).
 
 - **`base.py`** — `Finding`, dataclass gelée, et `Rule`, classe abstraite. Une règle
   concrète redéfinit `id`, `hint`, `severity`, puis implémente `check(document)`.
@@ -133,7 +134,9 @@ Trois fichiers, et c'est tout.
 
 Le registre est plat : une fois `fr.py` et `en.py` importés, plus rien ne dit d'où vient
 une règle. Il faut donc que la règle porte elle-même l'information. Mieux encore, les deux
-règles actuelles ne déclarent pas de liste de langues : elles la déduisent de leur donnée.
+règles fondées sur des données ne déclarent pas de liste de langues : elles la déduisent
+de leur donnée. Seule `Passif`, qui dépend de l'analyse grammaticale, déclare
+`langues = ("fr",)`.
 
 ```python
 def s_applique_a(self, langue: str) -> bool:
@@ -145,13 +148,13 @@ Conséquence : ajouter une langue, c'est ajouter une entrée dans `seuils.py` ou
 `lexiques.py`. Aucune ligne de code ne change. **C'est ce qui rend l'extension aux
 24 langues de l'UE possible sans refonte.**
 
-### Les deux règles livrées
+### Les trois règles livrées
 
 | Règle | Principe | Sévérité | Mécanisme |
 |---|---|---|---|
 | `longueur_phrase` | P4 — faire court et simple | avertissement | compte les tokens de chaque phrase, compare au seuil de la langue |
 | `connecteurs_lourds` | P5 — choisir des mots simples | info | seize locutions administratives, chacune avec sa reformulation |
-| `passif` | P8 — préciser qui fait quoi | info / avertissement | dépendances spaCy, heuristique des verbes avec *être*, recherche d'agent |
+| `passif` | P8 — préciser qui fait quoi | info avec agent / avertissement sans agent | `aux:pass` ou `cop`, participe `VERB`, heuristique des verbes avec *être*, recherche d'`obl:agent` |
 
 `_motif()` compile une expression du lexique en expression régulière tolérante :
 `\s+` entre les mots (double espace, retour à la ligne), `re.IGNORECASE` (majuscule de
@@ -192,10 +195,21 @@ Ce qu'il faut faire remarquer :
 3. **Le volet « Structure du texte »** — le tableau de diagnostic affiche
    `texte[start:end]` à côté de chaque fragment. C'est l'invariant, visible à l'œil nu.
 
-Puis, sans base de données ni serveur :
+Puis, pour le passif — le moment fort :
+
+```
+La décision a été prise par le conseil.   -> passif avec agent (info)
+La décision a été prise.                  -> passif sans agent (avertissement)
+Elle est allée à Paris.                   -> rien : « aller » se conjugue avec être
+```
+
+Une regex `être + participe` signalerait les trois ; l'analyse en dépendances et
+l'heuristique les distinguent. Annoncer le chiffre : 2 sur 6 avec les dépendances seules.
+
+Enfin, sans base de données ni serveur :
 
 ```powershell
-pytest tests/test_rules.py -v
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_rules.py tests/test_passif.py -v
 ```
 
 ---
@@ -208,9 +222,18 @@ un empan précis et propose une reformulation. Et les formules classiques compte
 syllabes, ce qui les rend peu transposables d'une langue à l'autre.
 
 **« Pourquoi une regex plutôt que spaCy pour les connecteurs ? »**
-Une locution figée est une suite de mots, pas une structure syntaxique. spaCy coûterait
-un chargement de modèle pour un résultat identique. Il est réservé à ce qui l'exige
-vraiment : la détection du passif, en phase 2.
+Une locution figée est une suite de mots, pas une structure syntaxique. Passer par l'analyse
+spaCy n'apporterait rien pour ce cas. Elle est réservée à ce qui l'exige vraiment : la
+détection du passif.
+
+**« Pourquoi spaCy ne découpe-t-il pas les phrases ? »**
+Mesuré : sur un titre suivi d'une ligne vide, spaCy fusionne le titre et la phrase
+suivante, et l'analyse devient fausse. pysbd reste la seule autorité de segmentation ;
+spaCy analyse chaque phrase isolément, et ses positions sont reportées par
+`phrase.start + token.idx`.
+
+**« Pourquoi pas `fr_core_news_md` ? »**
+Comparé sur sept phrases de référence : aucun résultat différent. Le modèle léger suffit.
 
 **« Que se passe-t-il pour une langue non couverte ? »**
 Rien, et c'est testé. `s_applique_a()` interroge la donnée, donc une règle sans seuil ni
@@ -240,10 +263,12 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
 - « s'agissant **des** pièces » n'est pas détecté — `des` n'est ni `de` ni `d'`.
   Le lexique traite les locutions figées, pas la morphologie.
 - La tokenisation est un simple `\S+` : la ponctuation reste collée au mot. Suffisant
-  pour compter des mots, remplacé par la tokenisation spaCy en phase 2.
+  pour compter des mots ; la tokenisation fine reste à faire.
 - Le lexique compte seize entrées. C'est un échantillon représentatif, pas un inventaire.
 - Un seul texte à la fois, pas d'historique, pas d'export : phase 3.
-- « La porte est ouverte » et « Il est convaincu » restent signalés : la frontière entre état et passif est ambiguë. Le premier cas est documenté par un test `xfail`.
+- Les analyses ne sont pas encore enregistrées en base ; les tables et la migration existent.
+- « La porte est ouverte » et « Il est convaincu » restent signalés : la frontière entre état et passif est ambiguë. Le premier cas est documenté par un test `xfail`. Score : 4 sur 6 sur les phrases de référence, contre 2 sur 6 avec les dépendances seules.
+- Les attributs adjectivaux (« est susceptible de ») ne sont plus signalés depuis le 15/09 : la règle exige un participe étiqueté `VERB`.
 
 ---
 
@@ -256,8 +281,8 @@ Copy-Item .env.example .env                 # puis renseigner SECRET_KEY
 python -c "import secrets; print(secrets.token_hex(32))"
 
 flask run                                   # http://127.0.0.1:5000
-pytest                                      # toute la suite
-pytest tests/test_rules.py -v               # le moteur seul, sans base
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider                         # toute la suite
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_rules.py -v  # le moteur seul
 
 python -c "import app.services.rules"       # silence = registre sain
 ```

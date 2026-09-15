@@ -1,6 +1,6 @@
 # Analyseur de langage clair — décisions de conception
 
-*Mise à jour : 8 septembre 2026.*
+*Mise à jour : 15 septembre 2026.*
 
 *Ce document dit **quoi** et **pourquoi**. Le calendrier est dans [plan-de-travail.md](plan-de-travail.md), l'environnement dans [setup-projet-vscode.md](setup-projet-vscode.md), les révisions de soutenance dans [theorie.md](theorie.md).*
 
@@ -122,7 +122,7 @@ Savoir dire en soutenance que c'est **la même idée employée à deux endroits*
 
 Ce point était laissé ouvert et devait être tranché au moment d'intégrer spaCy. Il est tranché maintenant, avant l'écriture de la première règle, pour une raison simple : dans l'autre ordre, les règles déjà écrites auraient dû être reprises.
 
-Quand spaCy arrivera, ce même objet gagnera un attribut `.spacy_doc` optionnel. Les règles existantes ne changent pas ; les nouvelles l'utilisent. C'est aussi ce qui rend crédible l'isolement décrit en **D-7**.
+Le plan initial prévoyait d'ajouter à ce même objet un attribut `.spacy_doc` optionnel. **Mise en œuvre, 15 septembre :** chaque `Sentence` porte plutôt un champ `analyse`, une liste de `TokenLinguistique` (dataclass maison projetée par `linguistics.py`). Les règles existantes n'ont pas changé, et aucune règle ne manipule d'objet spaCy : c'est ce qui rend l'isolement décrit en **D-7** effectif. Le champ `spacy_doc` subsiste mais reste inutilisé.
 
 ### D-5 et D-6 — L'objet `Finding`
 
@@ -157,7 +157,7 @@ Argument de soutenance : le moteur de règles ne connaît pas la base de donnée
 
 Un dossier se justifie quand il contiendra **au moins trois fichiers de même nature**. En dessous, un module suffit.
 
-D'où `models.py` et `repositories.py` en modules uniques, et `rules/fr.py` contenant les huit ou dix règles françaises plutôt que dix fichiers de quarante lignes. `extraction/` est un dossier parce que c'est là que le motif de registre se lit le mieux : un fichier par format.
+D'où `repositories.py` en module unique, et `rules/fr.py` contenant les huit ou dix règles françaises plutôt que dix fichiers de quarante lignes. `extraction/` est un dossier parce que c'est là que le motif de registre se lit le mieux : un fichier par format. `models/` est devenu un dossier en application de la même règle : trois entités, trois fichiers.
 
 L'arborescence exacte est dans [setup-projet-vscode.md](setup-projet-vscode.md).
 
@@ -179,11 +179,15 @@ Tokenisation **à l'import**, avec position enregistrée. Champs par token : for
 
 Prévoir un **numéro de version du tokeniseur** par document et une commande de retokenisation : le tokeniseur *sera* modifié en cours de route.
 
+*État au 15 septembre :* seule la tokenisation grossière existe (`\S+`, ponctuation collée au mot). D-15 et les cas ci-dessus relèvent de la tokenisation fine, pas encore commencée. La colonne `version_tokeniseur` existe déjà dans `DocumentRecord`.
+
 > **Ordonnancement :** une tokenisation grossière suffit en phase 1 ; la version fine arrive en phase 2. Voir [plan-de-travail.md](plan-de-travail.md).
 
 ---
 
 ## 7. Les règles
+
+*État au 15 septembre : trois règles livrées — `longueur_phrase`, `connecteurs_lourds` et `passif`. Le jargon et les nominalisations restent à écrire.*
 
 ### Les quatre premières — quatre principes différents
 
@@ -208,7 +212,7 @@ En français, l'ambiguïté est réelle : *elle est allée* n'est pas un passif,
 >
 > Trois enseignements. Le modèle s'appuie fortement sur le complément d'agent — retirer « par le conseil » fait passer `été` de `aux:pass` à `cop` et le passif disparaît. *Elle est allée* est un faux positif corrigeable proprement, le lemme valant `aller` : une liste des verbes intransitifs conjugués avec *être* élimine toute la famille. *La porte est ouverte* reste honnêtement ambigu — c'est une limite à énoncer, pas un bug à corriger.
 
-**Mise en œuvre, 15 septembre :** la règle accepte aussi l'étiquette `cop` pour couvrir le passif sans agent ; elle écarte les lemmes de la liste `verbes_conjugues_avec_etre(langue)`. La comparaison de `fr_core_news_sm` et `fr_core_news_md` sur sept phrases n'a montré aucun gain du modèle moyen : `sm` reste le modèle du projet.
+**Mise en œuvre, 15 septembre :** la règle accepte aussi l'étiquette `cop` pour couvrir le passif sans agent ; elle écarte les attributs dont le gouverneur n'est pas un `VERB` (« est susceptible ») et les lemmes de la liste `verbes_conjugues_avec_etre(langue)`. Résultat : 4 sur 6 sur les phrases de référence. La comparaison de `fr_core_news_sm` et `fr_core_news_md` sur sept phrases n'a montré aucun gain du modèle moyen : `sm` reste le modèle du projet.
 >
 > **Conséquence : les heuristiques portent la moitié du résultat.** Elles ne sont pas un ajustement final. Le détail des six cas est dans [theorie.md](theorie.md) §6.
 
