@@ -12,9 +12,15 @@ button    { background: #2d3239; color: #e4e4e4; border: 1px solid #4a515a;
             border-radius: 4px; padding: .4rem .9rem; cursor: pointer; }
 button:hover { background: #3a4048; }
 .colonnes { display: flex; gap: 1.5rem; align-items: flex-start; }
-.texte    { flex: 3; background: #1e2228; padding: 1rem; white-space: pre-wrap;
+.texte    { flex: 3; position: sticky; top: 1rem; max-height: calc(100vh - 2rem);
+            overflow-y: auto; background: #1e2228; padding: 1rem; white-space: pre-wrap;
             line-height: 1.6; border-radius: 4px; }
-.liste    { flex: 2; }
+.liste    { flex: 2; min-width: 0; }
+
+@media (max-width: 50rem) {
+  .colonnes { display: block; }
+  .texte    { position: static; max-height: none; margin-bottom: 1.5rem; }
+}
 .resume   { list-style: none; padding: 0; margin: -.3rem 0 1rem;
             color: #9aa2ac; font-size: .85rem; }
 .resume strong { color: #e4e4e4; font-variant-numeric: tabular-nums; }
@@ -40,3 +46,4 @@ small     { color: #8d949d; font-variant-numeric: tabular-nums; }
 .tok      { display: inline-block; margin-right: .7rem; }
 .fiche.active  { border-left-color: #7fb3ff; background: #262f3a; }
 mark.active    { outline: 2px solid #e72dff; outline-offset: 1px; border-radius: 2px; }
+mark.r-passif {box-shadow: inset 0 -2px 0 #b88cff;}

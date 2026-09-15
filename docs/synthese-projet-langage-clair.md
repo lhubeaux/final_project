@@ -207,6 +207,8 @@ En français, l'ambiguïté est réelle : *elle est allée* n'est pas un passif,
 > **Mesure effectuée le 7 septembre**, avec `fr_core_news_sm` 3.8.0, critère `aux:pass`/`nsubj:pass` seul, sur les six phrases de référence : **2 sur 6**.
 >
 > Trois enseignements. Le modèle s'appuie fortement sur le complément d'agent — retirer « par le conseil » fait passer `été` de `aux:pass` à `cop` et le passif disparaît. *Elle est allée* est un faux positif corrigeable proprement, le lemme valant `aller` : une liste des verbes intransitifs conjugués avec *être* élimine toute la famille. *La porte est ouverte* reste honnêtement ambigu — c'est une limite à énoncer, pas un bug à corriger.
+
+**Mise en œuvre, 15 septembre :** la règle accepte aussi l'étiquette `cop` pour couvrir le passif sans agent ; elle écarte les lemmes de la liste `verbes_conjugues_avec_etre(langue)`. La comparaison de `fr_core_news_sm` et `fr_core_news_md` sur sept phrases n'a montré aucun gain du modèle moyen : `sm` reste le modèle du projet.
 >
 > **Conséquence : les heuristiques portent la moitié du résultat.** Elles ne sont pas un ajustement final. Le détail des six cas est dans [theorie.md](theorie.md) §6.
 

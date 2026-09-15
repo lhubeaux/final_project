@@ -1,161 +1,150 @@
-# Analyseur de langage clair — consignes de travail
+# Analyseur de langage clair — repères de travail
 
-Projet de fin de formation. Application Flask qui analyse un texte administratif selon
+Application Flask qui analyse un texte administratif en français, signale les
+obstacles à la clarté et affiche chaque signalement dans le texte. Référentiel :
 les dix principes de rédaction claire des institutions européennes.
 
 **Échéance : lundi 28 septembre 2026. Gel des fonctionnalités : jeudi 24 septembre.**
 
----
+## Collaboration
 
-## Comment travailler avec moi
+- Répondre en français et rester court, sauf demande de détail.
+- **Ne modifier aucun fichier sans demande explicite.** Donner le code exact à
+  écrire pour que l'utilisateur l'applique et puisse l'expliquer.
+- Toujours montrer un appel complet :
+  `build_document(texte_brut, langue="fr")`, pas seulement son nom.
+- Discuter avant toute nouvelle dépendance ou modification de `requirements.txt`.
+- Signaler un bug silencieux en une phrase.
 
-- **Ne modifie aucun fichier sans demande explicite.** Donne le code exact à écrire, je
-  l'applique moi-même. C'est délibéré : je dois pouvoir expliquer chaque ligne en soutenance.
-- **Réponds en français**, et **court par défaut**. Une question ponctuelle appelle une réponse
-  de deux ou trois lignes, pas une section structurée. Développe seulement si je le demande.
-- **Montre toujours la syntaxe d'appel complète** d'une fonction, pas seulement son nom :
-  `render_template("analyze/index.html", texte=valeur)`, pas « utilise render_template ».
-- Pas de dépendance nouvelle sans en discuter d'abord.
-- Signale un bug silencieux si tu en vois un, mais en une phrase.
+## Environnement et commandes
 
----
-
-## Environnement
-
-Windows 11, Python 3.14, venv local. Le dépôt reste sur `C:` — développement natif Windows,
-pas de WSL, ne pas déplacer.
+Windows 11, Python 3.14, développement natif sur `C:`, venv local `.venv`.
+Ne pas déplacer le dépôt vers WSL.
 
 ```powershell
-py -m venv .venv
-.venv\Scripts\Activate.ps1          # PowerShell
-# source .venv/Scripts/activate     # Git Bash — Scripts/, pas bin/
-pip install -r requirements.txt
-Copy-Item .env.example .env         # puis renseigner SECRET_KEY
-flask run                           # http://127.0.0.1:5000
-pytest
+.venv\Scripts\Activate.ps1
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider
+flask run
 ```
 
-`SECRET_KEY` : `python -c "import secrets; print(secrets.token_hex(32))"`
+L'application répond sur `http://127.0.0.1:5000`. Les variables sont dans `.env`
+et l'exemple est `.env.example`.
 
-Le modèle spaCy `fr_core_news_sm` 3.8.0 est épinglé par URL dans `requirements.txt` :
-`pip install -r` suffit, aucun téléchargement séparé.
+`fr_core_news_sm` 3.8.0 est le modèle de référence, épinglé dans
+`requirements.txt`. `fr_core_news_md` est installé localement pour comparaison,
+mais n'a montré aucun gain sur le jeu d'essai : ne pas l'ajouter aux dépendances.
 
----
+## Pipeline et invariant central
 
-## Ce qui n'est pas dans le dépôt
-
-`docs/`, `todo.md`, `.env`, `instance/`, `.venv/` sont dans `.gitignore`. Sur une autre machine,
-les quatre documents de conception (`plan-de-travail.md`, `synthese-projet-langage-clair.md`,
-`theorie.md`, `setup-projet-vscode.md`) **ne seront pas là**. Ce fichier porte donc l'essentiel
-de ce qu'ils contiennent.
-
----
-
-## Décisions de conception à respecter
-
-| Réf. | Décision |
-|---|---|
-| D-1 | Un texte à la fois ; français d'abord, anglais ensuite |
-| D-2 | `.txt` `.docx` `.odt` `.md` acceptés ; `.pdf` et `.doc` refusés |
-| D-3 | `check()` reçoit un objet `Document` maison (paragraphes, phrases, tokens) |
-| D-4 | Normaliser **une seule fois** à l'entrée ; le texte normalisé est LE texte de référence |
-| D-5 | Toute règle renvoie un `Finding` portant un empan de caractères |
-| D-6 | `Finding` (transport, dataclass) ≠ `FindingRecord` (persistance) |
-| D-7 | spaCy isolé derrière `services/linguistics.py` — aucune règle ne l'importe |
-| D-8 | Motif de registre, appliqué deux fois : extracteurs et règles |
-| D-9 | Un module tant qu'il n'y a pas trois fichiers de même nature |
-| D-10 | Pas de score global sur 100 |
-| D-11 | Seuils définis par langue |
-| D-12 | Listes de mots amorcées par script ponctuel, résultat versionné |
-| D-13 | Conteneurisation = bonus, non attendue dans l'évaluation, à faire en dernier |
-| D-14 | Détection du passif = dépendances syntaxiques **+ heuristiques** (2/6 mesuré avec `sm` seul) |
-| D-15 | Ponctuation conservée ; forme brute et forme normalisée stockées |
-
----
-
-## L'invariant des positions
-
-La chaîne est `normaliser → segmenter → tokeniser → analyser`. Chaque couche découpe une
-chaîne et **transporte** sa position par addition, elle ne la recalcule jamais :
-
-```
-bloc.start()      position du paragraphe dans le texte
-+ span.start      position de la phrase dans le paragraphe
-= phrase["start"] position de la phrase dans le texte   ─┐ passé en offset
-+ match.start()   position du token dans la phrase      ─┘
-= token["start"]  position du token dans le texte
+```text
+texte brut
+  -> normalize()
+  -> segment()
+  -> tokenize()
+  -> analyser_phrases()
+  -> build_document()
+  -> run(document)
+  -> surligner()
+  -> template
 ```
 
-L'invariant qui garde tout ça en vie, testé dans `tests/test_positions.py` :
+`build_document(texte_brut, langue="fr")` est le seul point d'entrée du moteur.
+Il normalise une fois, puis le texte normalisé devient l'unique référence.
+
+**Invariant :** pour chaque fragment, token ou signalement :
 
 ```python
-texte[fragment["start"]:fragment["end"]] == fragment["texte"]
+document.texte[start:end] == fragment.texte
 ```
 
-Deux pièges déjà rencontrés, à ne pas réintroduire :
+Ne jamais retrouver un empan avec `texte.find(...)` et ne jamais cumuler des
+longueurs de paragraphes : les textes répétés et les lignes vides décalent les
+positions.
 
-- `texte.find(phrase)` pour retrouver une position — échoue dès qu'une phrase se répète.
-- Cumuler les longueurs — dérive de 2 caractères par ligne vide entre paragraphes.
+Le HTML est échappé segment par segment avant l'insertion de `<mark>`. Ne jamais
+échapper un texte déjà balisé ni découper un texte déjà échappé.
 
-Corollaire XSS : échapper le HTML **avant** d'insérer les balises de surlignage, segment par
-segment entre les frontières de signalements. L'échappement change la longueur (`<` → `&lt;`).
+## Décisions non négociables
 
----
+| Sujet | Décision |
+|---|---|
+| Entrée | Un texte à la fois ; français d'abord. |
+| Formats | Prévoir `.txt`, `.md`, `.docx`, `.odt` ; refuser `.pdf` et `.doc`. |
+| Objet des règles | `check(document)` reçoit le `Document` métier, jamais Flask ou spaCy. |
+| spaCy | Seul `services/linguistics.py` importe spaCy. Les règles lisent `Sentence.analyse`. |
+| Signalement | Toute règle renvoie un `Finding` avec un empan absolu. |
+| Persistance | `Finding` est une dataclass de transport ; `FindingRecord` est le modèle SQLAlchemy. |
+| Extensibilité | Registre pour les règles, et plus tard pour les extracteurs. |
+| Langues | Seuils et lexiques par langue ; une langue non couverte ne doit jamais lever de `KeyError`. |
+| Score | Pas de score global sur 100. |
+| Données | Listes linguistiques versionnées dans le projet, aucune requête réseau à l'exécution. |
 
-## Architecture
+## Architecture actuelle
 
-```
+```text
 app/
-├── __init__.py            fabrique create_app()
-├── config.py              configuration par variables d'environnement
-├── models.py              Document, Analysis, FindingRecord
-├── repositories.py        accès aux données — aucune linguistique
-├── cli.py                 commandes : seed, retokenize
-├── routes/                analyze (utilisateur) · admin (configuration)
+├── __init__.py                 create_app(), extensions et /health
+├── config.py                   configuration par environnement
+├── models/                     modèles SQLAlchemy : DocumentRecord, Analysis, FindingRecord
+├── repositories.py             vide ; future persistance, sans linguistique
+├── routes/analyze.py           GET/POST /, orchestration de l'analyse
+├── routes/admin.py             vide ; future administration
 └── services/
-    ├── extraction/        registre + un module par format
-    ├── normalization.py   BOM, CRLF, NFC, soft hyphen, apostrophes, insécables
-    ├── segmentation.py    pysbd, char_span=True — sans franchir les paragraphes
-    ├── tokenization.py    \S+ avec offset
-    ├── linguistics.py     unique point de contact avec spaCy
-    └── rules/             base · runner · fr · en
+    ├── normalization.py        normalisation Unicode et espaces
+    ├── segmentation.py         paragraphes et phrases avec pysbd
+    ├── tokenization.py         tokens grossiers avec offsets
+    ├── linguistics.py          chargement spaCy et TokenLinguistique
+    ├── document.py             dataclasses métier et build_document()
+    ├── rendering.py            échappement HTML et surlignage
+    ├── extraction/             structure vide pour les imports futurs
+    └── rules/
+        ├── base.py             Finding et contrat Rule
+        ├── runner.py           registre, regles() et run()
+        ├── seuils.py           seuils numériques par langue
+        ├── lexiques.py         connecteurs et verbes avec être
+        ├── fr.py               règles françaises
+        └── en.py               vide ; extension anglaise future
 ```
 
----
+La documentation détaillée de chaque module est dans
+`docs/guide-des-modules-python.md`.
 
-## État d'avancement
+## État au 15 septembre
 
-**Phase 0 — socle** ✅ dépôt, venv, dépendances, `create_app()`, route `/health`.
+### Fait
 
-**Phase 1 — la chaîne complète en version minimale** (→ ven 11/09), en cours :
-- ✅ `normalization.py`, `segmentation.py`, `tokenization.py` avec positions absolues
-- ✅ route `POST /analyze`, template de diagnostic affichant `texte[start:end]`
-- ⬜ `models.py` : `Document`, `Analysis`, `FindingRecord` — trois entités, pas sept
-- ⬜ objet `Document` maison (D-3), puis `rules/base.py` et `rules/runner.py`
-- ⬜ deux règles : longueur de phrase (seuil), connecteurs lourds (liste + remplacement)
-- ⬜ écran de résultats avec surlignage
-- ⬜ tests unitaires des règles et de la normalisation, sans base de données
+- Chaîne complète : normalisation, segmentation, tokenisation, `Document`,
+  moteur de règles, surlignage et interface liée aux fiches.
+- Règles : `longueur_phrase`, `connecteurs_lourds`, `passif`.
+- Intégration spaCy : chaque phrase est analysée séparément puis projetée dans
+  `Sentence.analyse`.
+- Règle du passif : `aux:pass` et repli `cop`, exclusion des verbes conjugués
+  avec *être*, agent `obl:agent`, sévérité plus haute sans agent.
+- Interface : le texte surligné reste visible pendant le défilement des fiches
+  sur ordinateur ; une colonne sur mobile.
+- Tests : 15 passent ; « La porte est ouverte » est un `xfail` assumé.
 
-**Phase 2** (→ ven 18/09) : spaCy et détection du passif *(priorité absolue)*, import de
-fichiers, tokenisation fine, deux règles de plus.
+### Limites connues
 
-**Phase 3** (→ jeu 24/09) : durcissement d'abord, documentation, écrans de configuration,
-puis historique / export / anglais / conteneurisation.
+- « La porte est ouverte » et « Il est convaincu » peuvent être signalés comme
+  passifs : état et passif restent ambigus pour cette heuristique.
+- Tokenisation `\S+` : la ponctuation reste collée au mot.
+- La route n'enregistre pas encore les analyses en base.
+- Les extracteurs de fichiers, l'administration, les repositories et la CLI ne
+  sont pas encore implémentés.
 
----
+## Prochaine priorité
 
-## Ordre de sacrifice si le retard s'installe
+1. Compléter les cas de `tests/test_passif.py` lorsque l'utilisateur est prêt à
+   exécuter les tests.
+2. Implémenter l'import de fichiers : registre d'extracteurs, `.txt`, `.md`,
+   `.docx`, puis `.odt`.
+3. Ajouter validation serveur : texte vide, longueur maximale, format refusé,
+   taille de fichier et fichier corrompu.
+4. Ensuite seulement : tokenisation fine, règles supplémentaires, configuration,
+   historique et export.
 
-Conteneurisation → export et historique → jeu de règles anglais → écrans de configuration →
-import `.odt` puis `.docx` → règles au-delà des quatre premières → tokenisation fine.
-
-**Jamais sacrifié :** normalisation, segmentation, moteur de règles, quatre règles,
-surlignage, détection du passif, durcissement, journée de répétition.
-
----
-
-## Habitudes
-
-- Une branche par fonctionnalité, un commit par jour minimum, messages en français.
-- Ne jamais terminer la journée sur un dépôt qui ne démarre pas.
-- Le moteur de règles ne connaît pas la base : ses tests tournent en isolation, devant le jury.
+Ordre de sacrifice : conteneurisation, export/historique, anglais,
+administration, `.odt`/`.docx`, règles supplémentaires, tokenisation fine.
+Ne jamais sacrifier la chaîne, les quatre règles visées, le surlignage, le
+passif, le durcissement et la répétition de soutenance.

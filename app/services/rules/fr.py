@@ -4,7 +4,10 @@ from app.services.document import Document
 from app.services.rules.base import Finding, Rule
 from app.services.rules.runner import enregistrer
 from app.services.rules.seuils import seuil
-from app.services.rules.lexiques import connecteurs_lourds
+from app.services.rules.lexiques import (
+    connecteurs_lourds,
+    verbes_conjugues_avec_etre,
+)
 
 
 @enregistrer
@@ -80,6 +83,65 @@ class ConnecteursLourds(Rule):
                     match.end(),            # on balaie document.texte lui-même
                     f"« {match.group()} » alourdit la phrase.",
                     suggestion=lexique[expression],
+                ))
+
+        return findings
+
+
+
+@enregistrer
+class Passif(Rule):
+    """Signale les tournures passives et leur éventuel agent absent."""
+
+    id = "passif"
+    hint = "P8 — préciser qui fait quoi"
+    severity = "info"
+    langues = ("fr",)
+
+    def check(self, document: Document) -> list[Finding]:
+        findings = []
+
+        for phrase in document.phrases:
+            for auxiliaire in phrase.analyse:
+                if auxiliaire.fonction not in {"aux:pass", "cop"}:
+                    continue
+
+                if not 0 <= auxiliaire.gouverneur < len(phrase.analyse):
+                    continue
+
+                participe = phrase.analyse[auxiliaire.gouverneur]
+
+                if participe.lemme in verbes_conjugues_avec_etre(document.langue):
+                    continue
+
+                auxiliaires = [
+                    token
+                    for token in phrase.analyse
+                    if token.gouverneur == auxiliaire.gouverneur
+                    and token.categorie == "AUX"
+                ]
+                debut = min(token.start for token in auxiliaires)
+
+                a_un_agent = any(
+                    token.gouverneur == auxiliaire.gouverneur
+                    and token.fonction == "obl:agent"
+                    for token in phrase.analyse
+                )
+
+                if a_un_agent:
+                    message = "Tournure passive : précisez clairement qui agit."
+                    severity = "info"
+                else:
+                    message = (
+                        "Tournure passive sans agent : le lecteur ne sait pas qui agit."
+                    )
+                    severity = "avertissement"
+
+                findings.append(self.signaler(
+                    debut,
+                    participe.end,
+                    message,
+                    severity=severity,
                 ))
 
         return findings

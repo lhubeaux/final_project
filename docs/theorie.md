@@ -288,6 +288,8 @@ Conséquence pratique : le plan prévoit en phase 2 de **constituer le jeu d'ess
 
 Premier réflexe en phase 2 : tester le modèle `fr_core_news_md` sur le même jeu d'essai. S'il fait nettement mieux, une ligne de `requirements.txt` change et tu gagnes des heures d'heuristiques.
 
+**Mesure réalisée le 15 septembre :** sur sept phrases (quatre passifs, *elle est allée*, *il est convaincu*, *la porte est ouverte*), `fr_core_news_md` n'a donné aucun résultat différent de `sm`. Le projet conserve donc `sm` ; l'amélioration passe par des heuristiques et un jeu d'essai plus large, pas par ce changement de modèle.
+
 ### À lire
 
 - [spaCy 101](https://spacy.io/usage/spacy-101) — à lire en entier, c'est court

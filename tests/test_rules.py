@@ -77,8 +77,12 @@ def test_empan_toujours_fidele_au_texte():
 
 # --- registre et langues -----------------------------------------------------
 
-def test_les_deux_regles_sont_enregistrees():
-    assert [regle.id for regle in regles("fr")] == ["longueur_phrase", "connecteurs_lourds"]
+def test_les_trois_regles_sont_enregistrees():
+    assert [regle.id for regle in regles("fr")] == [
+        "longueur_phrase",
+        "connecteurs_lourds",
+        "passif",
+    ]
 
 
 def test_langue_non_couverte_ne_fait_rien_planter():

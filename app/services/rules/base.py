@@ -45,12 +45,13 @@ class Rule(ABC):
         char_end: int,
         message: str,
         suggestion: str | None = None,
+        severity: Literal["info", "avertissement"] | None = None,
     ) -> Finding:
         """Fabrique un Finding en y reportant l'identité de la règle."""
         return Finding(
             rule_id=self.id,
             hint=self.hint,
-            severity=self.severity,
+            severity=severity or self.severity,
             char_start=char_start,
             char_end=char_end,
             message=message,

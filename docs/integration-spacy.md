@@ -1,6 +1,6 @@
 # Intégration de spaCy
 
-*14 septembre 2026 — début de phase 2. Mesures faites avec `fr_core_news_sm` 3.8.0.*
+*Mis à jour le 15 septembre 2026. Intégration réalisée avec `fr_core_news_sm` 3.8.0.*
 
 **En une phrase :** pysbd découpe, spaCy analyse chaque phrase, `linguistics.py` traduit en objets maison, `build_document()` les rattache, les règles ne voient jamais spaCy.
 
@@ -84,7 +84,7 @@ Elle est allée à Paris.
 
 Logique :
 
-1. Repérer un token `aux:pass`.
+1. Repérer un token `aux:pass`, ou `cop` dans le cas sans complément d'agent que le modèle étiquette ainsi.
 2. Son gouverneur est le participe.
 3. **Heuristique** — lemme du participe dans la liste des verbes conjugués avec *être* (aller, venir, partir, arriver, rester, tomber, naître, mourir, devenir…) → pas un passif.
 4. Aucun dépendant `obl:agent` → passif sans agent, sévérité plus haute.
@@ -96,11 +96,11 @@ Rappel (D-14) : `aux:pass` / `nsubj:pass` seuls obtiennent **2 sur 6** sur les p
 
 ## 6. Ordre de travail
 
-1. **Jeu d'essai d'abord** — `tests/test_passif.py`, une vingtaine de phrases avec `@pytest.mark.parametrize`. Cas ambigus en `@pytest.mark.xfail`.
-2. **Fixture de portée session** pour le modèle : `@pytest.fixture(scope="session")`.
-3. **`linguistics.py`** — chargement et projection.
-4. **Rattachement** dans `build_document()`.
-5. **La règle**, puis mesure sur le jeu d'essai.
-6. **Tester `fr_core_news_md`** — non installé, nouvelle dépendance à décider. Une ligne de `requirements.txt` si le gain est net.
+1. ✅ **Jeu d'essai** — `tests/test_passif.py` couvre deux passifs, le passé composé avec *être* et un cas ambigu `xfail`.
+2. ✅ **Fixture de portée session** pour le modèle : `@pytest.fixture(scope="session")`.
+3. ✅ **`linguistics.py`** — chargement unique, projection et positions absolues.
+4. ✅ **Rattachement** dans `build_document()`.
+5. ✅ **Règle `Passif`** — l'absence d'agent augmente la sévérité.
+6. ✅ **Comparaison `fr_core_news_md`** — mêmes résultats que `sm` sur sept phrases : le modèle moyen reste installé pour essai, mais n'est pas ajouté à `requirements.txt`.
 
 **Jalon du 18/09 :** *la décision a été prise* est-elle distinguée de *elle est allée à Paris* ?

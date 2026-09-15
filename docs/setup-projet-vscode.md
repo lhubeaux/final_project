@@ -26,7 +26,7 @@ L'application ne change pas d'un environnement à l'autre : une application Flas
 | Dépendances | installées, modèle spaCy français compris |
 | Tests | `pytest` découvert par VS Code, suite au vert |
 
-**Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1.
+**Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1. `fr_core_news_md` 3.8.0 est aussi présent pour comparaison, mais le projet utilise `sm` et seul ce dernier est épinglé dans `requirements.txt`.
 
 > **Le risque d'installation de spaCy est écarté.** Le modèle français s'importe et s'exécute. C'est un point d'ordonnancement : le plan initial différait spaCy pour limiter ce risque, qui n'existe plus. Voir [plan-de-travail.md](plan-de-travail.md), principe 3.
 
@@ -148,7 +148,7 @@ pytest
 
 **Le modèle spaCy est épinglé par URL.** Une installation ordinaire le récupère comme n'importe quelle autre dépendance — dans le venv aujourd'hui, dans l'image Docker en phase 3, sur un hébergeur en cas de mise en ligne. Une ligne qui évite une soirée de perplexité.
 
-*Si `fr_core_news_md` s'avère meilleur en phase 2 (voir le plan), c'est cette ligne, et elle seule, qui change.*
+`fr_core_news_md` a été comparé à `sm` sur sept phrases de référence, sans gain observé. Cette ligne reste donc inchangée.
 
 ### `.env.example`
 

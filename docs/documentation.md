@@ -1,6 +1,6 @@
 # Analyseur de langage clair — documentation technique
 
-État au 11 septembre 2026, fin de la phase 1.
+État au 15 septembre 2026, phase 2 en cours.
 Document de référence : ce que le code fait aujourd'hui, et pourquoi il le fait ainsi.
 Pour l'oral, voir plutôt `soutenance.md`, qui est un aide-mémoire de questions-réponses.
 
@@ -65,7 +65,7 @@ app/
     ├── segmentation.py    paragraphes puis phrases (pysbd)
     ├── tokenization.py    \S+ avec report de position
     ├── rendering.py       surligner() — échappement puis balisage
-    ├── linguistics.py     futur point de contact unique avec spaCy    (vide)
+    ├── linguistics.py     point de contact unique avec spaCy
     ├── extraction/        registre + un module par format             (vide)
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (classe abstraite)
@@ -248,8 +248,9 @@ Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
 ## 8. Tests
 
 ```powershell
-pytest                                  # 12 tests
+pytest                                  # toute la suite
 pytest tests/test_rules.py -v           # le moteur seul, sans base ni serveur
+pytest tests/test_passif.py -v          # la règle du passif seule
 ```
 
 | Fichier | Ce qu'il garantit |
@@ -257,6 +258,7 @@ pytest tests/test_rules.py -v           # le moteur seul, sans base ni serveur
 | `test_positions.py` | l'invariant sur les paragraphes, les phrases et les tokens ; le cas du texte vide |
 | `test_rules.py` | les deux règles, l'empan de chaque signalement, l'absence de faux positif au milieu d'un mot, et qu'une langue non couverte ne fait rien planter |
 | `test_smoke.py` | la route `/health` répond |
+| `test_passif.py` | les passifs avec ou sans agent, le faux positif « Elle est allée », et le cas ambigu `xfail` |
 
 `test_rules.py` n'importe ni `create_app` ni `db` : c'est la démonstration concrète que le
 moteur est isolé de la base.
@@ -281,6 +283,9 @@ moteur est isolé de la base.
 
 **Phase 2** (→ ven 18/09) : spaCy et détection du passif *(priorité absolue)*, import de
 fichiers, tokenisation fine, deux règles de plus.
+- ✅ spaCy analyse les phrases séparées par `pysbd` et projette ses tokens dans `Sentence.analyse`
+- ✅ règle `passif`, affichée par le mécanisme générique de surlignage
+- ⬜ import de fichiers, tokenisation fine, règles supplémentaires
 
 **Phase 3** (→ jeu 24/09) : durcissement, documentation, écrans de configuration, puis
 historique / export / anglais / conteneurisation.

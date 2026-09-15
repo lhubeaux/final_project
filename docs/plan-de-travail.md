@@ -112,6 +112,8 @@ L'import de fichiers. Une zone de texte suffit à boucler la chaîne, et l'extra
 
 **1. spaCy et la détection du passif.** C'est la pièce maîtresse de la soutenance, et elle passe avant tout le reste de la phase.
 
+*État au 15/09 : réalisé. `linguistics.py` analyse chaque phrase isolée et la règle `passif` est couverte par des tests ; la comparaison `fr_core_news_sm` / `md` sur sept phrases n'a montré aucun gain pour `md`.*
+
 - Chargement du modèle **une seule fois** au démarrage, derrière `services/linguistics.py`.
 - **Le jeu d'essai d'abord, la règle ensuite.** Une vingtaine de phrases : passifs véritables, et faux positifs classiques (*elle est allée*, *la porte est ouverte*, *il est convaincu*).
 - Détection par `aux:pass` / `nsubj:pass`, **plus heuristiques**.

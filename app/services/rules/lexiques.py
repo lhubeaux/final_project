@@ -33,3 +33,30 @@ CONNECTEURS_LOURDS: dict[str, dict[str, str]] = {
 def connecteurs_lourds(langue: str) -> dict[str, str]:
     """Le lexique de cette langue, vide si elle n'est pas encore couverte."""
     return CONNECTEURS_LOURDS.get(langue, {})
+
+VERBES_CONJUGUES_AVEC_ETRE: dict[str, frozenset[str]] = {
+    "fr": frozenset({
+        "aller",
+        "arriver",
+        "devenir",
+        "descendre",
+        "entrer",
+        "monter",
+        "mourir",
+        "naître",
+        "partir",
+        "passer",
+        "rentrer",
+        "rester",
+        "retomber",
+        "retourner",
+        "sortir",
+        "tomber",
+        "venir",
+    }),
+}
+
+
+def verbes_conjugues_avec_etre(langue: str) -> frozenset[str]:
+    """Les verbes français qui emploient normalement l'auxiliaire être."""
+    return VERBES_CONJUGUES_AVEC_ETRE.get(langue, frozenset())

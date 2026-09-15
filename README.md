@@ -189,7 +189,7 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - [ ] Écran de résultats avec surlignage
 
 **Phase 2 — Analyse grammaticale**
-- [ ] Intégration de spaCy et détection du passif
+- [x] Intégration de spaCy et détection du passif
 - [ ] Import de fichiers
 - [ ] Tokenisation fine
 - [ ] Deux règles supplémentaires
@@ -205,6 +205,7 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - Un texte à la fois, sans traitement par lots.
 - Les suggestions se copient mais ne s'appliquent pas automatiquement : corriger le texte invaliderait toutes les positions affichées et supposerait de relancer l'analyse.
 - *La porte est ouverte* reste un cas ambigu que l'analyse grammaticale ne tranche pas — le français ne distingue pas formellement le passif d'état du passif d'action.
+- `fr_core_news_md` a été comparé à `fr_core_news_sm` sur le jeu d'essai du passif : aucun gain constaté. Le projet conserve donc le modèle léger, seul référencé dans `requirements.txt`.
 - Le chargement du modèle spaCy occupe quelques centaines de mégaoctets au démarrage.
 
 ## Documentation

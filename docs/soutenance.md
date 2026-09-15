@@ -1,6 +1,6 @@
 # Soutenance — aide-mémoire
 
-Analyseur de langage clair. État au 11 septembre 2026, fin de phase 1.
+Analyseur de langage clair. État au 15 septembre 2026, phase 2 en cours.
 Ce document n'est pas versionné (`docs/` est dans `.gitignore`).
 
 ---
@@ -91,7 +91,7 @@ app/
     ├── document.py        build_document() — le seul point d'entrée
     ├── normalization.py · segmentation.py · tokenization.py
     ├── rendering.py       surligner()
-    ├── linguistics.py     unique point de contact avec spaCy (phase 2)
+    ├── linguistics.py     unique point de contact avec spaCy
     ├── extraction/        registre + un module par format (phase 2)
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (ABC)
@@ -151,6 +151,7 @@ Conséquence : ajouter une langue, c'est ajouter une entrée dans `seuils.py` ou
 |---|---|---|---|
 | `longueur_phrase` | P4 — faire court et simple | avertissement | compte les tokens de chaque phrase, compare au seuil de la langue |
 | `connecteurs_lourds` | P5 — choisir des mots simples | info | seize locutions administratives, chacune avec sa reformulation |
+| `passif` | P8 — préciser qui fait quoi | info / avertissement | dépendances spaCy, heuristique des verbes avec *être*, recherche d'agent |
 
 `_motif()` compile une expression du lexique en expression régulière tolérante :
 `\s+` entre les mots (double espace, retour à la ligne), `re.IGNORECASE` (majuscule de
@@ -242,6 +243,7 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
   pour compter des mots, remplacé par la tokenisation spaCy en phase 2.
 - Le lexique compte seize entrées. C'est un échantillon représentatif, pas un inventaire.
 - Un seul texte à la fois, pas d'historique, pas d'export : phase 3.
+- « La porte est ouverte » et « Il est convaincu » restent signalés : la frontière entre état et passif est ambiguë. Le premier cas est documenté par un test `xfail`.
 
 ---
 
