@@ -47,3 +47,19 @@ small     { color: #8d949d; font-variant-numeric: tabular-nums; }
 .fiche.active  { border-left-color: #7fb3ff; background: #262f3a; }
 mark.active    { outline: 2px solid #e72dff; outline-offset: 1px; border-radius: 2px; }
 mark.r-passif {box-shadow: inset 0 -2px 0 #b88cff;}
+
+/* Import de fichiers. `.erreur` sert à tous les refus d'import : format
+   non pris en charge, fichier corrompu, encodage non reconnu. */
+.depot    { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
+            margin: .7rem 0; }
+.depot label { color: #9aa2ac; }
+input[type="file"] { color: #e4e4e4; font-family: inherit; }
+input[type="file"]::file-selector-button {
+            background: #2d3239; color: #e4e4e4; border: 1px solid #4a515a;
+            border-radius: 4px; padding: .3rem .7rem; margin-right: .6rem;
+            cursor: pointer; font-family: inherit; }
+input[type="file"]::file-selector-button:hover { background: #3a4048; }
+.formats  { color: #6f7783; font-size: .85rem; }
+.erreur   { border: 1px solid #7a3b3b; border-left: 4px solid #e06c6c;
+            background: #2a1d1e; color: #ffd7d7; border-radius: 4px;
+            padding: .6rem .8rem; }

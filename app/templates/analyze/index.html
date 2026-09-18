@@ -9,10 +9,21 @@
 
 <h1>Analyseur de langage clair</h1>
 
-<form method="post">
-  <textarea name="texte" rows="8" maxlength="20000">{{ document.texte if document else '' }}</textarea>
+<form method="post" enctype="multipart/form-data">
+  <textarea id="texte" name="texte" rows="8" maxlength="20000">{{ document.texte if document else '' }}</textarea>
+
+  <p class="depot">
+    <label for="fichier">ou déposer un fichier :</label>
+    <input id="fichier" type="file" name="fichier" accept="{{ extensions | join(',') }}">
+    <span class="formats">{{ extensions | join(' · ') }} — 2 Mo maximum</span>
+  </p>
+
   <p><button type="submit">Analyser</button></p>
 </form>
+
+{% if erreur %}
+  <p class="erreur">{{ erreur }}</p>
+{% endif %}
 
 {% if document %}
   <div class="colonnes">
