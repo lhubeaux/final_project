@@ -63,6 +63,16 @@ def index():
             # quel : la route ne le reformule pas.
             erreur = str(echec)
             texte_brut = ""
+        maximum = current_app.config["MAX_TEXT_LENGTH"]
+        if len(texte_brut) > maximum:
+            # `maxlength` n'existe que dans le navigateur : un envoi direct le
+            # contourne. C'est la seule vérification qui tienne.
+            erreur = (
+                f"Texte trop long : {len(texte_brut)} caractères "
+                f"pour {maximum} au maximum."
+            )
+            texte_brut = ""
+
 
         if texte_brut.strip():
             document = build_document(texte_brut, langue="fr")

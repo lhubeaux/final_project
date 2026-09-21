@@ -76,8 +76,8 @@ app/
 ├── __init__.py            fabrique d'application, route /health
 ├── config.py              configuration par variables d'environnement
 ├── models/                DocumentRecord · Analysis · FindingRecord
-├── repositories.py        accès aux données — aucune linguistique (à venir)
-├── cli.py                 commandes : seed, retokenize (à venir)
+├── repositories.py        accès aux données — tout le SQL, aucune linguistique
+├── cli.py                 commande flask seed
 ├── routes/                analyze (utilisateur) · admin (configuration, à venir)
 ├── templates/ · static/   page d'analyse, CSS, lien surlignage ↔ fiches
 └── services/
@@ -89,7 +89,7 @@ app/
     ├── rendering.py       échappement HTML puis surlignage
     ├── extraction/        registry · txt · md · docx · odt
     └── rules/             base · runner · seuils · lexiques · fr · en
-data/seeds/                listes de mots versionnées
+data/seeds/                listes de mots versionnées, source de flask seed
 exemples/                  textes de démonstration, un par format
 migrations/                migrations Alembic
 tests/
@@ -129,6 +129,15 @@ et y renseigner une `SECRET_KEY`. Une valeur convenable s'obtient par :
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
+Enfin, créer la base et y charger les listes de mots :
+
+```bash
+flask db upgrade
+flask seed
+```
+
+`flask seed` lit `data/seeds/lexiques.json` et n'ajoute que les entrées absentes : on peut le relancer sans risque. **Ne pas l'oublier** — sur une base vide, rien ne plante, mais la règle des connecteurs lourds disparaît et la détection du passif perd son exclusion des verbes conjugués avec *être*.
+
 ## Utilisation
 
 ```bash
@@ -145,7 +154,7 @@ python -m pytest -p no:cacheprovider
 
 28 tests passent, plus un `xfail` assumé — le cas ambigu *La porte est ouverte*.
 
-Le moteur de règles ne connaît pas la base de données : sa suite de tests s'exécute en isolation, sans fixture de persistance.
+Les règles lisent leurs listes de mots en base : leurs tests tournent dans une application de test dont la base, en mémoire, est amorcée à chaque test. Aucun test n'a besoin de la base réelle ni d'un serveur.
 
 ---
 
@@ -207,9 +216,11 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - [ ] Tokenisation fine
 - [ ] Deux règles supplémentaires
 
-**Phase 3 — Finition** *(en cours, gel des fonctionnalités le 24/09)*
+**Phase 3 — Finition** *(en cours, gel des fonctionnalités le 25/09 au soir)*
 - [x] Documentation technique et guide des modules
 - [x] Durcissement : erreur 413, `MAX_TEXT_LENGTH` côté serveur, tests du parcours d'erreur
+- [x] Listes de mots en base, amorcées depuis un fichier versionné
+- [ ] Enregistrement des analyses
 - [ ] Écrans de configuration
 - [ ] Historique, export, jeu de règles anglais
 - [ ] Conteneurisation *(bonus — non attendue dans l'évaluation)*
@@ -222,8 +233,6 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - La tokenisation actuelle découpe sur les espaces : la ponctuation reste collée au mot.
 - Les analyses ne sont pas encore enregistrées en base.
 - L'import ne lit que le corps du document : les tableaux d'un `.docx` sont ignorés, ainsi que les notes de bas de page.
-- Un texte collé de plus de 500 Ko reçoit le message du dépassement de taille plutôt que celui de la longueur maximale : `MAX_FORM_MEMORY_SIZE` reste à fixer.
-- La longueur maximale du texte n'est contrôlée que côté navigateur pour l'instant.
 - `fr_core_news_md` a été comparé à `fr_core_news_sm` sur le jeu d'essai du passif : aucun gain constaté. Le projet conserve donc le modèle léger, seul référencé dans `requirements.txt`.
 - Le chargement du modèle spaCy occupe quelques centaines de mégaoctets au démarrage.
 

@@ -5,6 +5,11 @@ from app.services.linguistics import modele
 from app.services.rules.fr import Passif
 
 
+# La règle lit la liste des verbes conjugués avec être en base.
+pytestmark = pytest.mark.usefixtures("base_amorcee")
+
+
+
 @pytest.fixture(scope="session")
 def nlp():
     """Charge spaCy une fois pour toute la session de tests."""

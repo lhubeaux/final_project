@@ -33,7 +33,7 @@ Chaque décision porte un identifiant, pour que les autres documents y renvoient
 | **D-9** | Un module tant qu'il n'y a pas trois fichiers de même nature | L'arborescence reflète ce qui grossit vraiment |
 | **D-10** | Pas de score global sur 100 | Toute pondération serait arbitraire et indéfendable |
 | **D-11** | Seuils définis par langue | Une phrase française fait 15 à 20 % de mots de plus |
-| **D-12** | Listes de mots amorcées par script ponctuel, résultat versionné | La démonstration ne dépend d'aucun réseau |
+| **D-12** | Listes de mots amorcées par script ponctuel, résultat versionné | La démonstration ne dépend d'aucun réseau — *mis en œuvre le 21/09 : `data/seeds/lexiques.json` chargé en base par `flask seed`* |
 | **D-13** | Développement en venv local ; conteneurisation en bonus facultatif | Non attendue dans l'évaluation ; l'infrastructure n'est pas le sujet |
 | **D-14** | Détection du passif = dépendances syntaxiques **+ heuristiques** | Les dépendances seules obtiennent 2 sur 6 (mesuré) |
 | **D-15** | Ponctuation conservée ; forme brute et forme normalisée stockées | Le texte reste reconstructible, la casse bascule sans retraitement |
@@ -158,6 +158,8 @@ class Finding:
 - `routes/` — minces.
 
 Argument de soutenance : le moteur de règles ne connaît pas la base de données, donc sa suite de tests s'exécute en isolation — et peut tourner en direct devant le jury.
+
+**Révisé le 21 septembre.** Les listes de mots sont passées en base, et `lexiques.py` les lit directement via le repository : c'était le choix le plus court, fait en connaissance de cause. Le moteur dépend donc de la base, et l'argument ci-dessus ne tient plus tel quel. Ce qui reste vrai : aucune règle n'écrit de SQL ni n'importe `models`, les deux fonctions de `lexiques.py` ont gardé leur signature, et les tests du moteur tournent toujours en direct devant le jury — dans une application de test dont la base, en mémoire, est amorcée par la même fonction que `flask seed`. La frontière a bougé : elle passe entre les règles et le SQL, plus entre le moteur et la base.
 
 ### D-9 — Modules ou dossiers
 

@@ -1,0 +1,29 @@
+{
+  "connecteurs_lourds": {
+    "fr": {
+      "afin de": "pour",
+      "en vue de": "pour",
+      "dans le but de": "pour",
+      "au moyen de": "avec",
+      "par le biais de": "par",
+      "dans le cadre de": "pour",
+      "en ce qui concerne": "sur",
+      "s'agissant de": "sur",
+      "au titre de": "selon",
+      "en application de": "selon",
+      "conformément à": "selon",
+      "préalablement à": "avant",
+      "à l'issue de": "après",
+      "il convient de": "il faut",
+      "est susceptible de": "peut",
+      "nonobstant": "malgré"
+    }
+  },
+  "verbes_conjugues_avec_etre": {
+    "fr": [
+      "aller", "arriver", "devenir", "descendre", "entrer", "monter",
+      "mourir", "naître", "partir", "passer", "rentrer", "rester",
+      "retomber", "retourner", "sortir", "tomber", "venir"
+    ]
+  }
+}

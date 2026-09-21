@@ -100,6 +100,9 @@ class Passif(Rule):
 
     def check(self, document: Document) -> list[Finding]:
         findings = []
+        # Une seule lecture par analyse, et non une par auxiliaire rencontré :
+        # la liste vient de la base.
+        verbes_etre = verbes_conjugues_avec_etre(document.langue)
 
         for phrase in document.phrases:
             for auxiliaire in phrase.analyse:
@@ -115,7 +118,8 @@ class Passif(Rule):
                 if participe.categorie != "VERB":
                     continue
 
-                if participe.lemme in verbes_conjugues_avec_etre(document.langue):
+                if participe.lemme in verbes_etre:
+
                     continue
 
 

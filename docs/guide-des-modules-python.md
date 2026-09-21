@@ -27,9 +27,9 @@ La chaîne travaille toujours sur le texte normalisé. Les positions `start` et
 document.texte[start:end] == fragment.texte
 ```
 
-Le chemin de persistance est volontairement séparé et n'est pas encore branché
-à la route : les objets SQLAlchemy existent, mais une analyse affichée n'est pas
-encore enregistrée en base.
+La base intervient à un seul endroit de cette chaîne : pendant `run(document)`,
+les règles lisent leurs listes de mots via `lexiques.py`, qui passe par le
+repository. Une analyse affichée n'est pas encore enregistrée en base.
 
 ---
 
@@ -73,12 +73,30 @@ configuration de l'application lancée localement.
   `MAX_TEXT_LENGTH` et `MAX_UPLOAD_BYTES`.
 - `MAX_CONTENT_LENGTH` est interprété par Flask avant que la route ne traite une
   requête avec fichier.
+- `MAX_FORM_MEMORY_SIZE` est aligné sur `MAX_CONTENT_LENGTH`. Flask 3.1 plafonne
+  à part les champs non-fichier, à 500 000 octets par défaut, et lève un 413
+  avant la route : sans cet alignement, un texte collé trop long recevrait le
+  message du dépassement de taille au lieu de celui de `MAX_TEXT_LENGTH`.
 - `TestConfig(Config)` active `TESTING` et utilise une base SQLite en mémoire.
 
 ### `app/cli.py`
 
-Fichier préparé, actuellement vide. Il accueillera les commandes Flask telles
-que l'amorce des listes de mots et la retokenisation.
+Porte la commande `flask seed`, enregistrée dans la fabrique par
+`app.cli.add_command(seed)`. Sous Flask 3.1, une commande ajoutée à `app.cli`
+reçoit d'office le contexte d'application : pas besoin de `@with_appcontext`.
+
+- `AMORCE` est le chemin de `data/seeds/lexiques.json`, la source versionnée des
+  listes de mots (D-12).
+- `charger_amorce()` lit le JSON sous une forme unique,
+  `{liste: {langue: {expression: remplacement}}}` : une liste JSON, comme celle
+  des verbes, devient un dict sans remplacement grâce à `dict.fromkeys()`.
+- `amorcer_lexiques()` passe chaque liste à `repositories.amorcer_liste()` et
+  renvoie un bilan. `flask seed` l'affiche ; la fixture de test `base_amorcee`
+  l'appelle aussi, si bien que les tests et l'application s'amorcent par le même
+  chemin.
+
+Lire un fichier n'est pas le travail du repository : c'est pourquoi le JSON est
+lu ici, et seulement transmis au repository.
 
 ---
 
@@ -246,17 +264,21 @@ une langue non couverte sans lever de `KeyError`.
 
 ### `app/services/rules/lexiques.py`
 
-Contient les données linguistiques versionnées :
+Ne contient plus de données depuis le 21 septembre : il lit la base.
 
-- `CONNECTEURS_LOURDS` associe chaque expression administrative à une
-  reformulation plus simple ; `connecteurs_lourds(langue)` renvoie le dictionnaire
-  de la langue ou un dictionnaire vide.
-- `VERBES_CONJUGUES_AVEC_ETRE` liste les lemmes qui emploient normalement *être* ;
-  `verbes_conjugues_avec_etre(langue)` renvoie le `frozenset` concerné ou un
-  ensemble vide.
+- `connecteurs_lourds(langue)` renvoie `lire_liste("connecteurs_lourds", langue)`,
+  un dictionnaire `{expression: remplacement}`.
+- `verbes_conjugues_avec_etre(langue)` renvoie
+  `frozenset(lire_liste("verbes_conjugues_avec_etre", langue))`.
 
-Déplacer ces listes dans ce module permet d'ajouter une langue par des données,
-sans modifier la logique des règles.
+Les deux signatures sont celles d'avant le passage en base : aucune règle n'a eu
+à changer. Une langue sans liste donne un dictionnaire ou un ensemble vide, jamais
+une `KeyError`.
+
+Le module passe par le repository plutôt que par les modèles : tout le SQL reste
+dans `repositories.py`. Les règles dépendent donc de la base, mais seulement à
+travers ces deux fonctions ; elles s'exécutent dans un contexte d'application —
+celui de la requête, ou celui de la fixture `base_amorcee` en test.
 
 ### `app/services/rules/fr.py`
 
@@ -301,7 +323,7 @@ attributs `data-findings` pour relier le surlignage aux fiches de détails.
 
 ---
 
-## Persistance : présente, pas encore utilisée
+## Persistance : listes de mots en service, analyses pas encore enregistrées
 
 ### `app/models/base.py`
 
@@ -328,16 +350,43 @@ informations utiles au rendu, mais aussi `analysis_id` qui le rattache à son
 analyse. La séparation évite de faire circuler une session SQLAlchemy dans le
 moteur de règles.
 
+### `app/models/lexique.py`
+
+Deux modèles liés, réunis dans un fichier parce qu'ils ne vont pas l'un sans
+l'autre.
+
+- `WordList` — une liste nommée pour une langue, table `word_lists`, unique sur
+  (`nom`, `langue`). Sa relation `entrees` supprime ses entrées avec elle.
+- `WordEntry` — une entrée, table `word_entries`, unique dans sa liste sur
+  `expression`. `remplacement` reste vide pour les verbes conjugués avec *être* :
+  une seule table sert les listes avec et sans reformulation.
+
+Les contraintes d'unicité ne sont pas décoratives : ce sont elles qui empêchent
+un doublon le jour où les listes deviendront éditables.
+
 ### `app/models/__init__.py`
 
-Réexporte `db`, `Base`, `maintenant` et les trois modèles afin que la fabrique et
-les migrations puissent les importer depuis `app.models`.
+Réexporte `db`, `Base`, `maintenant` et les cinq modèles afin que la fabrique et
+les migrations puissent les importer depuis `app.models`. C'est parce que
+`WordList` et `WordEntry` y sont importés que `flask db migrate` les a détectés.
 
 ### `app/repositories.py`
 
-Fichier préparé et vide. Il accueillera les fonctions qui traduiront un
-`Document` et ses `Finding` en `DocumentRecord`, `Analysis` et `FindingRecord`.
-Les règles ne devront jamais l'importer.
+Tout le SQL du projet. Aucune linguistique : le repository range et relit, il
+ne décide rien.
+
+- `amorcer_liste(nom, langue, entrees)` crée la liste si besoin, ajoute les
+  entrées absentes, puis valide la transaction. Elle n'écrase et ne supprime
+  jamais rien, et renvoie le nombre d'entrées ajoutées : relancer l'amorce est
+  sans risque.
+- `lire_liste(nom, langue)` renvoie `{expression: remplacement}` par une
+  jointure `word_entries` → `word_lists`. Une liste absente donne un dict vide,
+  ce qui est voulu pour une langue non couverte — mais masque aussi une base
+  qu'on aurait oublié d'amorcer.
+
+L'enregistrement des analyses viendra ici, sous la forme de
+`enregistrer_analyse(...)` : c'est là, et nulle part ailleurs, que se fera la
+traduction `Finding` → `FindingRecord`.
 
 ---
 
@@ -427,5 +476,6 @@ déclenche leur enregistrement. Même mécanisme que `rules/__init__.py`.
 - `linguistics.py` est le seul module qui importe spaCy.
 - Une règle reçoit un `Document` et renvoie des `Finding`; elle ne connaît ni
   Flask, ni les templates, ni SQLAlchemy.
-- Les repositories, lorsqu'ils seront écrits, feront de la persistance mais pas
-  de linguistique.
+- Le repository fait de la persistance, jamais de linguistique ; c'est le seul
+  module qui écrit du SQL. Une règle y accède indirectement, par `lexiques.py`,
+  jamais en important `models`.

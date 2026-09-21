@@ -15,7 +15,7 @@ Chaque section donne l'essentiel, puis les liens vers la documentation de réfé
 | **Milieu de phase 1** | §2 Persistance · §7 Tests | Les trois entités de base et la première suite de tests. |
 | **Avant la phase 2** | §6 spaCy et dépendances | La détection du passif — la pièce maîtresse. À lire avant d'écrire la règle, pas pendant. |
 | **Phase 3** | §8 Sécurité · §9 Python | Pendant le durcissement. |
-| **25/09** | §10 Questions du jury | À voix haute. |
+| **26/09** | §10 Questions du jury | À voix haute, dès le lendemain du gel. |
 
 **Si tu ne lis que trois sections avant de commencer : §1, §3 et §4.** Les deux premières décrivent le code que tu écris tous les jours ; la troisième évite un bug qui coûte une journée entière.
 
@@ -151,7 +151,9 @@ Le principe sous-jacent porte un nom : le **principe ouvert/fermé** — ouvert 
 
 ### Le motif *repository*
 
-`repositories.py` concentre l'accès aux données. Les services ne connaissent pas SQLAlchemy, les *repositories* ne connaissent pas la linguistique. L'argument à faire valoir : **le moteur de règles se teste sans base de données**, donc sa suite de tests s'exécute en direct devant le jury en une fraction de seconde.
+`repositories.py` concentre l'accès aux données. Les services ne connaissent pas SQLAlchemy, les *repositories* ne connaissent pas la linguistique.
+
+*Dans ce projet, depuis le 21 septembre :* les règles lisent leurs listes de mots en base, en passant par `lexiques.py` puis par le repository. Le moteur ne se teste donc plus sans base — mais sans base *réelle* : une base SQLite en mémoire, créée et amorcée pour chaque test, suffit. Ce qui compte pour le motif reste vrai : tout le SQL est dans `repositories.py`, et aucune règle n'importe un modèle. C'est ce qui a permis de passer les listes en base sans modifier une seule règle.
 
 ### La *dataclass* comme objet de transport
 

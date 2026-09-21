@@ -88,9 +88,9 @@ segment commun portant les deux classes CSS, et non deux `<mark>` imbriqués.
 app/
 ├── __init__.py            create_app()
 ├── config.py              configuration par variables d'environnement
-├── models/                DocumentRecord, Analysis, FindingRecord
-├── repositories.py        accès aux données — aucune linguistique  (vide à ce jour)
-├── cli.py                 commandes seed, retokenize              (vide à ce jour)
+├── models/                DocumentRecord, Analysis, FindingRecord, WordList, WordEntry
+├── repositories.py        tout le SQL — aucune linguistique
+├── cli.py                 flask seed : data/seeds/lexiques.json -> base
 ├── routes/analyze.py      GET/POST /
 ├── static/                css/style.css · js/app.js
 ├── templates/analyze/index.html
@@ -104,7 +104,7 @@ app/
         ├── base.py        Finding (dataclass) + Rule (ABC)
         ├── runner.py      registre plat + run()
         ├── seuils.py      données : seuils par langue
-        ├── lexiques.py    données : listes de mots par langue
+        ├── lexiques.py    lit les listes de mots en base
         └── fr.py · en.py
 ```
 
@@ -226,7 +226,8 @@ Montrer que les quatre donnent les **mêmes** signalements : c'est la démonstra
 l'extraction est bien en amont de la chaîne et ne la contamine pas. Puis déposer un
 `.pdf` : le message dit pourquoi le format est refusé, il ne dit pas « format inconnu ».
 
-Enfin, sans base de données ni serveur :
+Enfin, sans serveur et sans toucher la base réelle — la fixture monte une base en
+mémoire, amorcée par la même fonction que `flask seed` :
 
 ```powershell
 .venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_rules.py tests/test_passif.py -v
@@ -269,11 +270,19 @@ la version précédente lisait `self.seuils[document.langue]` et levait un `KeyE
 **« Et l'injection HTML, si je colle un `<script>` ? »**
 Échappement avant balisage, segment par segment. Voir §3.
 
-**« Pourquoi les listes de mots ne sont-elles pas en base ? »**
-Elles y viendront, avec l'écran d'administration. Le point important est que la règle
-passe déjà par `connecteurs_lourds(document.langue)` : le jour où cette fonction lira la
-base, aucune règle ne change. Et le dict Python restera, comme graine du `seed` et comme
-source en test — parce que les tests du moteur ne doivent pas avoir besoin d'une base.
+**« Les listes sont dans un JSON et en base : pourquoi les deux ? »**
+Le JSON, `data/seeds/lexiques.json`, est la source versionnée (D-12) : git ne suit pas
+la base. La base est la copie d'exécution, et `flask seed` la reconstruit à tout moment.
+L'amorce n'ajoute que ce qui manque et n'écrase jamais rien : on peut la relancer, et
+elle ne détruira pas les ajouts d'un utilisateur le jour où les listes seront éditables.
+
+**« Passer les listes en base, ça a obligé à réécrire les règles ? »**
+Non, et c'est le point à faire remarquer. Les règles appelaient déjà
+`connecteurs_lourds(document.langue)` et `verbes_conjugues_avec_etre(document.langue)`.
+Seul l'intérieur de ces deux fonctions a changé : elles lisent maintenant la base via
+`repositories.lire_liste()`. Le prix, je l'assume : le moteur dépend de la base, donc ses
+tests tournent dans une application de test avec une base en mémoire. La frontière a
+bougé — elle passe désormais entre les règles et le SQL, qui reste confiné au repository.
 
 **« Que se passe-t-il si je dépose un fichier de 50 Mo ? »**
 Flask le refuse pendant la lecture du corps de la requête, via `MAX_CONTENT_LENGTH` :
@@ -315,9 +324,13 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
   pour compter des mots ; la tokenisation fine reste à faire.
 - Le lexique compte seize entrées. C'est un échantillon représentatif, pas un inventaire.
 - Un seul texte à la fois, pas d'historique, pas d'export : phase 3.
+- Sur une base migrée mais non amorcée, rien ne plante : la règle des connecteurs
+  disparaît et le passif perd son exclusion des verbes avec *être*. Une liste absente
+  donne un dict vide — c'est voulu pour une langue non couverte, et c'est le revers du
+  même mécanisme. D'où `flask seed` dans les étapes d'installation.
+- Les listes sont en base mais ne s'éditent pas encore depuis l'interface.
 - L'import lit le corps du document : les tableaux d'un `.docx` et les notes de bas de page sont ignorés.
 - Le choix de l'extracteur se fait sur l'extension, pas sur les octets d'en-tête. Un `.pdf` renommé en `.docx` est refusé par python-docx, donc avec le bon résultat mais pour la mauvaise raison.
-- Un texte collé de plus de 500 Ko reçoit le message du dépassement de taille au lieu de celui de la longueur maximale : Flask 3.1 plafonne les champs non-fichier à part, et les deux plafonds ne sont pas encore alignés.
 - Les analyses ne sont pas encore enregistrées en base ; les tables et la migration existent.
 - « La porte est ouverte » et « Il est convaincu » restent signalés : la frontière entre état et passif est ambiguë. Le premier cas est documenté par un test `xfail`. Score : 4 sur 6 sur les phrases de référence, contre 2 sur 6 avec les dépendances seules.
 - Les attributs adjectivaux (« est susceptible de ») ne sont plus signalés depuis le 15/09 : la règle exige un participe étiqueté `VERB`.
@@ -331,6 +344,8 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
 pip install -r requirements.txt             # inclut le modèle spaCy, épinglé par URL
 Copy-Item .env.example .env                 # puis renseigner SECRET_KEY
 python -c "import secrets; print(secrets.token_hex(32))"
+flask db upgrade                            # crée les tables
+flask seed                                  # charge les listes de mots ; relançable
 
 flask run                                   # http://127.0.0.1:5000
 .venv\Scripts\python.exe -m pytest -p no:cacheprovider                         # toute la suite

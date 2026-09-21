@@ -22,7 +22,7 @@ C'est le contrat minimum. Tout le reste est négociable.
 4. Rien ne plante sur un texte vide, un texte très long, ou un texte contenant des caractères spéciaux.
 5. Une suite de tests s'exécute devant le jury et passe.
 
-**Si ces cinq points tiennent le 24 septembre, le projet est réussi.** Ce qui s'ajoute ensuite améliore la note ; ce qui manque ne la détruit pas.
+**Si ces cinq points tiennent le 25 septembre, le projet est réussi.** Ce qui s'ajoute ensuite améliore la note ; ce qui manque ne la détruit pas.
 
 ---
 
@@ -33,9 +33,9 @@ C'est le contrat minimum. Tout le reste est négociable.
 | lun 07/09 | **Phase 0** — socle *(fait)* |
 | lun 07 → ven 11/09 | **Phase 1** — la chaîne complète, en version minimale |
 | lun 14 → ven 18/09 | **Phase 2** — ce qui rend le projet intéressant *(close)* |
-| lun 21 → jeu 24/09 | **Phase 3** — rendre présentable *(en cours)* |
-| **jeu 24/09 au soir** | **Gel des fonctionnalités** |
-| ven 25 → dim 27/09 | Répétition de la soutenance |
+| lun 21 → ven 25/09 | **Phase 3** — rendre présentable *(en cours)* |
+| **ven 25/09 au soir** | **Gel des fonctionnalités** *(repoussé d'un jour le 21/09)* |
+| sam 26 → dim 27/09 | Répétition de la soutenance |
 | **lun 28/09** | Livraison |
 
 Quinze jours ouvrés. Le plan ne suppose plus six heures productives par jour — il suppose seulement que **chaque phase se termine par quelque chose qui marche**. Si une phase déborde, ce n'est pas la suivante qui recule : c'est du contenu qu'on retire à l'intérieur de la phase (voir *Ce qu'on coupe*).
@@ -52,7 +52,7 @@ Ils comptent davantage que le détail des tâches.
 
 **3. La dépendance la plus lourde arrive en second.** spaCy n'entre en jeu qu'en phase 2, une fois l'application déjà fonctionnelle. *(Le risque d'installation, lui, est déjà écarté : le modèle `fr_core_news_sm` 3.8.0 est installé et vérifié — voir le setup.)*
 
-**4. Gel des fonctionnalités le 24 septembre.** Passé cette date : correction, documentation, répétition. Aucune fonctionnalité nouvelle, quelle que soit la tentation. C'est la décision qui protège le plus efficacement une soutenance, et celle qu'on regrette toujours de ne pas avoir prise.
+**4. Gel des fonctionnalités le 25 septembre au soir.** Passé cette date : correction, documentation, répétition. Aucune fonctionnalité nouvelle, quelle que soit la tentation. C'est la décision qui protège le plus efficacement une soutenance, et celle qu'on regrette toujours de ne pas avoir prise.
 
 ---
 
@@ -74,7 +74,7 @@ Détail et état exact dans [setup-projet-vscode.md](setup-projet-vscode.md).
 
 ### Contenu
 
-**Modèle de données — trois entités seulement.** ✅ `DocumentRecord`, `Analysis`, `FindingRecord`, et leur migration (`app/models/`). Les quatre autres (`RuleSet`, `RuleConfig`, `WordList`, `WordEntry`) attendent la phase 2 : tant qu'il n'y a pas d'écran de configuration, elles ne servent à rien. Les listes de mots se lisent directement depuis les fichiers JSON de `data/seeds/`.
+**Modèle de données — trois entités seulement.** ✅ `DocumentRecord`, `Analysis`, `FindingRecord`, et leur migration (`app/models/`). Les quatre autres (`RuleSet`, `RuleConfig`, `WordList`, `WordEntry`) attendent la phase 2 : tant qu'il n'y a pas d'écran de configuration, elles ne servent à rien. Les listes de mots se lisent directement depuis les fichiers JSON de `data/seeds/`. *(Révisé le 21/09 : `WordList` et `WordEntry` sont arrivés sans écran de configuration — `data/seeds/lexiques.json` reste la source versionnée, et `flask seed` la charge en base.)*
 
 **Normalisation.** ✅ Un seul service : NFC, apostrophes, espaces insécables, conservation des sauts de paragraphe. (`app/services/normalization.py`)
 
@@ -146,15 +146,19 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 
 ## Phase 3 — Rendre présentable
 
-**→ jeudi 24 septembre — en cours depuis le lundi 21.**
+**→ vendredi 25 septembre au soir — en cours depuis le lundi 21.**
 
 **Fin de phase :** un jury peut manipuler l'application sans la casser, et le dépôt se lit tout seul.
 
 > **État au 21/09, à l'ouverture de la phase.** Chaîne complète, surlignage, trois règles sur les quatre visées, import des quatre formats, 28 tests plus un `xfail`, documentation et diaporama faits.
 >
-> **L'import étant livré avec la phase 2, la phase 3 n'a plus qu'un objet : le durcissement.** Fait le 21/09 : l'erreur 413 rend désormais la page du formulaire avec son bandeau, `MAX_TEXT_LENGTH` est vérifié côté serveur, et `tests/test_validation.py` couvre le parcours d'erreur. Restent `MAX_FORM_MEMORY_SIZE` dans la configuration et `tests/test_normalization.py`.
+> **L'import étant livré avec la phase 2, la phase 3 n'a plus qu'un objet : le durcissement.** Fait le 21/09 : l'erreur 413 rend désormais la page du formulaire avec son bandeau, `MAX_TEXT_LENGTH` est vérifié côté serveur, `MAX_FORM_MEMORY_SIZE` est aligné sur `MAX_CONTENT_LENGTH`, et `tests/test_validation.py` couvre le parcours d'erreur. Reste `tests/test_normalization.py`.
 >
-> **Une décision reste à prendre**, et elle n'est pas technique : « quatre règles fonctionnelles » figure ci-dessous parmi ce qui n'est jamais sacrifié, et il n'y en a que trois. Soit la quatrième s'écrit — le jargon est une entrée de lexique de plus, une demi-journée — soit la liste descend à trois et c'est assumé à l'oral. Ne pas laisser la question ouverte jusqu'au 24.
+> **Décidé le 21/09.** Le gel est repoussé au vendredi 25 au soir, et la semaine va à la connexion à la base : enregistrement des analyses, puis connecteurs lourds et verbes conjugués avec *être* passés en base. La quatrième règle devient facultative — elle s'écrira s'il reste du temps. La liste de ce qui n'est jamais sacrifié descend donc à trois règles.
+>
+> Le prix de ce choix est à connaître : le gel repoussé prend le vendredi qui était réservé à la répétition. Il reste le week-end.
+>
+> **Fait le 21/09 :** les connecteurs lourds et les verbes conjugués avec *être* sont en base — tables `word_lists` et `word_entries`, amorce `flask seed` depuis `data/seeds/lexiques.json`, `lexiques.py` qui lit la base. Reste l'enregistrement des analyses.
 
 ### Contenu
 
@@ -177,9 +181,9 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 
 ## Gel, répétition, livraison
 
-**Jeudi 24/09 au soir : gel.** Plus aucune fonctionnalité.
+**Vendredi 25/09 au soir : gel.** Plus aucune fonctionnalité.
 
-**Vendredi 25/09 et le week-end : répétition.** Cette journée n'est pas du confort, c'est la journée la plus rentable des trois semaines.
+**Samedi 26 et dimanche 27/09 : répétition.** Ces deux journées ne sont pas du confort, ce sont les plus rentables des trois semaines — et depuis que le gel a été repoussé, il n'y en a plus que deux.
 
 - Préparer deux ou trois textes de démonstration, dont un déjà chargé au démarrage.
 - Répéter **à voix haute, chronomètre en main, au moins deux fois.**
@@ -200,14 +204,14 @@ Par ordre de sacrifice, du plus facile au plus douloureux. Coupe **dans cet ordr
 3. Jeu de règles anglais — mais savoir expliquer comment il s'ajouterait
 4. Écrans de configuration — remplaçables par des données d'amorce en base
 5. ~~Import `.odt`, puis `.docx`~~ — *fait le 18/09, sorti de la liste*
-6. Les règles au-delà des quatre premières
+6. La quatrième règle et au-delà
 7. La tokenisation fine — un découpage grossier tient debout
 
 ## Ce qui n'est jamais sacrifié
 
 - La normalisation et la segmentation
 - Le moteur de règles et son registre
-- Quatre règles fonctionnelles
+- Trois règles fonctionnelles — la quatrième est facultative depuis le 21/09
 - L'écran de résultats avec surlignage
 - La détection du passif
 - Le durcissement de la phase 3
@@ -234,4 +238,4 @@ Trois moments où l'on s'arrête pour constater, honnêtement, où l'on en est.
 |---|---|---|
 | **ven 11/09** | Est-ce que je colle un texte et vois des signalements surlignés ? | Retirer des règles jusqu'à ce que oui, avant de toucher à spaCy. |
 | **ven 18/09** | Est-ce que la détection du passif distingue *la décision a été prise* de *elle est allée à Paris* ? | ✅ **Oui.** 4 sur 6 sur les phrases de référence, contre 2 sur 6 avec les dépendances seules ; les deux échecs sont documentés, dont un en `xfail`. |
-| **jeu 24/09** | Est-ce qu'un inconnu peut manipuler l'application dix minutes sans la casser ? | Geler quand même et corriger. Le gel n'est pas négociable. |
+| **ven 25/09** | Est-ce qu'un inconnu peut manipuler l'application dix minutes sans la casser ? | Geler quand même et corriger. Le gel n'est pas négociable. |

@@ -21,12 +21,17 @@ L'application ne change pas d'un environnement à l'autre : une application Flas
 | Élément | Valeur |
 |---|---|
 | Python | 3.14.4 |
-| Emplacement | `C:\Users\louis\Documents\PythonFS\final_project` |
+| Emplacement | `C:\Users\Louis_Admin\Documents\PythonFS\final_project` |
 | Environnement | `.venv` local |
 | Dépendances | installées, modèle spaCy français compris |
 | Tests | `pytest` découvert par VS Code ; 28 passent, plus un `xfail` assumé |
 
 **Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1. *`defusedxml` n'est pas importé par le code du projet mais par odfpy, qui l'utilise pour lire le XML d'un `.odt`. La ligne de `requirements.txt` est donc redondante ; elle est gardée pour rendre la protection visible et pour tenir si odfpy changeait de parseur.* `fr_core_news_md` 3.8.0 est aussi présent pour comparaison, mais le projet utilise `sm` et seul ce dernier est épinglé dans `requirements.txt`.
+
+> **Le venv vient d'un autre profil Windows.** Il a été créé sous `C:\Users\louis`, puis le projet a été déplacé sous `Louis_Admin`. Deux traces en restent :
+>
+> - Les lanceurs `.exe` de `.venv\Scripts` gravent le chemin absolu de `python.exe` à l'installation. `flask.exe` et `pytest.exe` pointaient vers l'ancien emplacement ; ils ont été régénérés le 21 septembre, sans changer de version, par `.venv\Scripts\python.exe -m pip install --force-reinstall --no-deps flask==3.1.3 pytest==9.1.1`. Si un autre lanceur échoue, `python.exe -m <module>` le contourne toujours.
+> - `pyvenv.cfg` pointe vers le Python installé dans le profil `louis`. Cela fonctionne tant que ce dossier reste lisible. Le remède complet est de recréer le venv, mais `requirements.txt` n'épingle aucune version sauf le modèle spaCy : à faire après la soutenance, ou après un `pip freeze`.
 
 > **Le risque d'installation de spaCy est écarté.** Le modèle français s'importe et s'exécute. C'est un point d'ordonnancement : le plan initial différait spaCy pour limiter ce risque, qui n'existe plus. Voir [plan-de-travail.md](plan-de-travail.md), principe 3.
 
@@ -61,9 +66,13 @@ python -c "import secrets; print(secrets.token_hex(32))"
 Et lancer :
 
 ```powershell
+flask db upgrade                                         # crée les tables
+flask seed                                               # charge les listes de mots
 flask run                                                # http://127.0.0.1:5000
 .venv\Scripts\python.exe -m pytest -p no:cacheprovider   # tests
 ```
+
+`flask seed` est indispensable : sur une base vide, rien ne plante, mais la règle des connecteurs disparaît et le passif perd son exclusion des verbes avec *être*. La commande n'ajoute que les entrées absentes ; on peut la relancer sans risque.
 
 **Deux pièges rencontrés :**
 
@@ -83,9 +92,9 @@ final_project/
 ├── app/
 │   ├── __init__.py            # fabrique d'application, /health
 │   ├── config.py              # configuration par variables d'environnement
-│   ├── models/                # DocumentRecord, Analysis, FindingRecord
-│   ├── repositories.py        # accès aux données (vide)
-│   ├── cli.py                 # commandes : seed, retokenize (vide)
+│   ├── models/                # DocumentRecord, Analysis, FindingRecord, WordList, WordEntry
+│   ├── repositories.py        # accès aux données : tout le SQL
+│   ├── cli.py                 # commande flask seed
 │   ├── routes/
 │   │   ├── analyze.py         # saisie, résultats
 │   │   └── admin.py           # règles, listes de mots, historique (vide)
@@ -111,7 +120,7 @@ final_project/
 │   │       └── en.py          # (vide)
 │   ├── templates/analyze/index.html
 │   └── static/                # css/style.css, js/app.js
-├── data/seeds/                # listes de mots versionnées (vide)
+├── data/seeds/                # lexiques.json : source versionnée des listes de mots
 ├── scripts/                   # futur script d'amorce, hors application (vide)
 ├── tests/                     # positions, règles, passif, smoke
 ├── migrations/                # Alembic, première migration écrite
@@ -127,7 +136,7 @@ final_project/
 └── README.md
 ```
 
-Les fichiers marqués *(vide)* existent déjà et se remplissent au fil des phases. Les `.gitkeep` de `data/seeds/` et `scripts/` servent à faire suivre ces dossiers vides par git. Ceux de `templates/` et `static/` peuvent être supprimés, puisque ces dossiers ont maintenant du contenu.
+Les fichiers marqués *(vide)* existent déjà et se remplissent au fil des phases. Le `.gitkeep` de `scripts/` sert à faire suivre ce dossier vide par git ; celui de `data/seeds/` peut être supprimé, le dossier contient maintenant `lexiques.json`. Ceux de `templates/` et `static/` peuvent être supprimés, puisque ces dossiers ont maintenant du contenu.
 
 ---
 

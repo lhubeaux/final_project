@@ -30,6 +30,8 @@ py -m venv .venv
 # source .venv/Scripts/activate     # Git Bash — Scripts/, pas bin/
 pip install -r requirements.txt
 Copy-Item .env.example .env         # puis renseigner SECRET_KEY
+flask db upgrade                    # crée les tables
+flask seed                          # charge les listes de mots en base
 flask run                           # http://127.0.0.1:5000
 pytest
 ```
@@ -50,9 +52,9 @@ dépôt reste sur `C:`, pas de WSL.
 app/
 ├── __init__.py            fabrique create_app()
 ├── config.py              Config / TestConfig, lues depuis l'environnement
-├── models/                DocumentRecord · Analysis · FindingRecord
-├── repositories.py        accès aux données — aucune linguistique     (vide)
-├── cli.py                 commandes seed, retokenize                  (vide)
+├── models/                DocumentRecord · Analysis · FindingRecord · WordList · WordEntry
+├── repositories.py        tout le SQL : amorcer_liste(), lire_liste()
+├── cli.py                 flask seed : data/seeds/lexiques.json -> base
 ├── routes/
 │   ├── analyze.py         GET/POST /
 │   └── admin.py           écrans de configuration                     (vide)
@@ -77,7 +79,7 @@ app/
         ├── base.py        Finding (dataclass) + Rule (classe abstraite)
         ├── runner.py      registre plat, enregistrer / regles / run
         ├── seuils.py      données : seuils numériques par langue
-        ├── lexiques.py    données : connecteurs, verbes conjugués avec être
+        ├── lexiques.py    lit en base connecteurs et verbes conjugués avec être
         ├── fr.py          LongueurPhrase · ConnecteursLourds · Passif
         └── en.py          (vide)
 ```
@@ -86,11 +88,13 @@ Le détail de chaque module est dans `guide-des-modules-python.md`.
 
 ### Les trois frontières à ne pas franchir
 
-1. **Le moteur de règles ne connaît pas la base.** Aucun import de `models` ni de
-   `repositories` sous `services/rules/`. C'est ce qui permet de lancer
-   `pytest tests/test_rules.py` sans base de données ni serveur.
+1. **Aucune règle n'écrit de SQL.** Depuis le 21 septembre, les listes de mots sont en
+   base et `lexiques.py` les lit via `repositories.lire_liste()` : le moteur dépend donc
+   de la base, mais seulement à travers deux fonctions dont la signature n'a pas changé.
+   Aucune règle n'importe `models`. Conséquence assumée : `test_rules.py` et
+   `test_passif.py` tournent dans une application de test, base en mémoire amorcée.
 2. **Le repository ne fait pas de linguistique.** Il traduit des objets en lignes de
-   table, rien de plus.
+   table, rien de plus. Tout le SQL du projet est là.
 3. **Aucune règle n'importe spaCy** (D-7). Seul `services/linguistics.py` l'importe ; il
    traduit chaque token en `TokenLinguistique`, et les règles lisent `Sentence.analyse`.
 
@@ -221,8 +225,8 @@ return seuil(self.id, langue) is not None        # LongueurPhrase
 return bool(connecteurs_lourds(langue))          # ConnecteursLourds
 ```
 
-Ajouter une langue, c'est ajouter une entrée dans `seuils.py` ou `lexiques.py`. Aucune
-ligne de code ne change. C'est aussi ce qui rend le `KeyError` structurellement
+Ajouter une langue, c'est ajouter une entrée dans `seuils.py`, ou une langue dans
+`data/seeds/lexiques.json` suivie de `flask seed`. Aucune ligne de code ne change. C'est aussi ce qui rend le `KeyError` structurellement
 impossible : une règle ne peut pas s'exécuter sur une langue dont elle n'a pas la donnée.
 
 La règle `Passif`, elle, dépend de l'analyse grammaticale : elle déclare explicitement
@@ -266,16 +270,27 @@ est ouverte » et « Il est convaincu », où spaCy étiquette le participe `VER
 
 ## 6. Modèle de données
 
-Trois entités, pas sept.
+Cinq entités, pas sept : `RuleSet` et `RuleConfig` n'existent pas, faute d'écran de
+configuration des règles.
 
 | Table | Rôle | Points notables |
 |---|---|---|
 | `documents` | un texte soumis | `texte` est le texte **normalisé** ; `source` vaut `saisie` ou `fichier` ; `version_tokeniseur` prépare la commande `retokenize` |
 | `analyses` | une exécution du moteur sur un document | horodatée ; un document peut en avoir plusieurs |
 | `findings` | un signalement persisté | reflet de la dataclass `Finding`, mêmes champs, nom distinct (D-6) |
+| `word_lists` | une liste de mots nommée, pour une langue | unique sur (`nom`, `langue`) : `connecteurs_lourds` / `fr` |
+| `word_entries` | une entrée de liste | unique dans sa liste ; `remplacement` vide pour les verbes, qui n'ont pas de reformulation |
 
-Les trois tables existent et la migration est écrite. **Rien ne les remplit aujourd'hui** :
-la route ne persiste pas, `repositories.py` est vide. L'historique relève de la phase 3.
+Deux migrations : les trois premières tables (`7b70f94273c6`), puis les listes de mots
+(`346c000e5787`).
+
+**Les listes de mots sont remplies par `flask seed`.** La source versionnée reste
+`data/seeds/lexiques.json` (D-12) ; la base n'en est que la copie d'exécution.
+`amorcer_liste()` n'ajoute que les entrées absentes et n'écrase jamais rien : relancer
+l'amorce est sans risque, et le restera le jour où les listes deviendront éditables.
+
+**Les trois premières tables restent vides** : la route n'enregistre pas encore les
+analyses.
 
 Quand ce sera branché : la route appellera `repositories.enregistrer_analyse(...)`, jamais
 `db.session` directement, et c'est là — et nulle part ailleurs — que se fera la traduction
@@ -329,8 +344,12 @@ Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
 | `test_validation.py` | le parcours d'erreur, vu depuis la route : dépassement de 2 Mo (413), texte trop long, texte vide, refus `.pdf` et `.doc` avec leur raison, extension inconnue, `.docx` corrompu, `.txt` en cp1252 décodé, et la priorité du fichier sur la zone de texte |
 | `test_passif.py` | les passifs avec ou sans agent (empan et sévérité), le passif au futur, les faux positifs « Elle est allée » et attributs adjectivaux (« est susceptible », « est nécessaire »), l'invariant des positions sur `Sentence.analyse`, et le cas ambigu « La porte est ouverte » en `xfail` ; le modèle spaCy est chargé par une fixture de portée `session` |
 
-`test_rules.py` n'importe ni `create_app` ni `db` : c'est la démonstration concrète que le
-moteur est isolé de la base.
+Depuis que les listes de mots sont en base, `test_rules.py` et `test_passif.py` se
+déclarent `pytestmark = pytest.mark.usefixtures("base_amorcee")`. La fixture, dans
+`conftest.py`, crée une application de test, une base SQLite en mémoire, et l'amorce
+avec `amorcer_lexiques()` — la fonction même qu'utilise `flask seed`. Aucun test ne
+touche la base réelle. `client` s'appuie sur la même fixture : les tests de la route
+voient donc les mêmes listes que le moteur.
 
 État au 21 septembre : 28 tests passent, plus le `xfail` assumé, en moins de 3 secondes.
 
@@ -369,41 +388,39 @@ import de fichiers, tokenisation fine, deux règles de plus.
 Les points 1 à 3 sont tenus. Restent la tokenisation fine, les deux règles
 supplémentaires et le script d'amorce : ils entrent dans l'ordre de sacrifice ci-dessous.
 
-**Phase 3 — en cours** (lun 21 → jeu 24/09) : durcissement, documentation, écrans de
-configuration, puis historique / export / anglais / conteneurisation.
+**Phase 3 — en cours** (lun 21 → ven 25/09) : durcissement, puis connexion à la base.
 - ✅ texte vide refusé côté serveur ; format non pris en charge, fichier corrompu et
   encodage non reconnu affichés dans le bandeau d'erreur
 - ✅ erreur 413 : `app_errorhandler` rend la page du formulaire avec son bandeau
 - ✅ `MAX_TEXT_LENGTH` vérifié côté serveur
 - ✅ `tests/test_validation.py` — neuf cas du parcours d'erreur
-- ⬜ `MAX_FORM_MEMORY_SIZE` aligné sur `MAX_CONTENT_LENGTH` dans `config.py`
+- ✅ `MAX_FORM_MEMORY_SIZE` aligné sur `MAX_CONTENT_LENGTH` dans `config.py`
 - ⬜ `tests/test_normalization.py`
 - ✅ documentation technique et diaporama de soutenance (`docs/soutenance.pptx`)
+- ⬜ enregistrement des analyses : `DocumentRecord`, `Analysis`, `FindingRecord`
+- ✅ connecteurs lourds et verbes conjugués avec *être* en base, amorcés par `flask seed`
 
-L'import de fichiers étant livré avec la phase 2, la phase 3 n'a plus qu'un objet : le
-durcissement. C'est ce que demande le jalon du 24/09 — un inconnu manipule l'application
-dix minutes sans la casser.
+Le durcissement étant bouclé le 21/09, le reste de la semaine va à la connexion à la
+base. Ce choix avance deux lignes de l'ordre de sacrifice — la partie stockage de
+l'historique, et les listes de mots — au détriment de la quatrième règle, devenue
+facultative.
 
-Gel des fonctionnalités : jeudi 24 septembre. Soutenance : lundi 28 septembre 2026.
+Gel des fonctionnalités : vendredi 25 septembre au soir. Soutenance : lundi 28 septembre 2026.
 
 ### Ordre de sacrifice si le retard s'installe
 
 Conteneurisation → export et historique → jeu de règles anglais → écrans de configuration
-→ règles au-delà des quatre premières → tokenisation fine.
+→ quatrième règle et au-delà → tokenisation fine.
 
 *L'import `.odt` et `.docx` a quitté cette liste : il est fait.*
 
-**Jamais sacrifié :** normalisation, segmentation, moteur de règles, quatre règles,
-surlignage, détection du passif, durcissement, journée de répétition.
+**Jamais sacrifié :** normalisation, segmentation, moteur de règles, les trois règles
+livrées, surlignage, détection du passif, durcissement, répétition.
 
 ---
 
 ## 10. Limites connues
 
-- Flask 3.1 plafonne les champs non-fichier à `MAX_FORM_MEMORY_SIZE`, 500 000 octets par
-  défaut, et lève un 413 avant la route. Un texte collé de plus de 500 Ko reçoit donc le
-  message du dépassement de taille au lieu de celui de `MAX_TEXT_LENGTH`. Aligner les
-  deux plafonds dans `config.py` corrige le message.
 - « s'agissant **des** pièces » n'est pas détecté — `des` n'est ni `de` ni `d'`. Le lexique
   traite des locutions figées, pas la morphologie.
 - La tokenisation est un `\S+` : la ponctuation reste collée au mot. Suffisant pour
@@ -412,6 +429,14 @@ surlignage, détection du passif, durcissement, journée de répétition.
   spaCy étiquette le participe `VERB`, et état et passif restent ambigus pour cette
   heuristique.
 - La route n'enregistre pas les analyses en base.
+- **Base migrée mais non amorcée : aucune erreur, des signalements en moins.**
+  `lire_liste()` renvoie un dict vide pour une liste absente — c'est ce qui protège une
+  langue non couverte du `KeyError`. Mais sur une base où l'on a oublié `flask seed`, le
+  même mécanisme fait disparaître `connecteurs_lourds` des règles actives, et `Passif`
+  perd son exclusion des verbes avec *être* : « Elle est allée » redevient un faux
+  positif. Vérifié. Sans la migration, en revanche, l'erreur est bruyante :
+  `OperationalError: no such table: word_entries`.
+- Les listes vivent en base, mais aucun écran ne permet encore de les modifier.
 - `docx.paragraphs` ignore le texte des tableaux, et l'extracteur `.odt` ne lit que les
   paragraphes et les titres. Le corps du document, pas ses annexes.
 - `defusedxml` est bien utilisé, mais par odfpy et non par le code du projet : `odf/opendocument.py` fait `from defusedxml.sax import make_parser`. Le `.odt` est donc lu par un parseur durci, le `.docx` par lxml. La ligne de `requirements.txt` est techniquement redondante, odfpy tirant la dépendance ; elle est **gardée volontairement**, parce qu'elle rend visible dans le fichier des dépendances que le XML des fichiers de bureau est lu par un parseur durci, et qu'elle protège d'un changement de parseur côté odfpy.
@@ -419,4 +444,5 @@ surlignage, détection du passif, durcissement, journée de répétition.
   `Sentence.analyse`.
 - Le surlignage n'est cliquable qu'à la souris. Le rendre accessible au clavier demande un
   `tabindex` posé dans `rendering.py`.
-- Le lexique compte seize entrées : un échantillon représentatif, pas un inventaire.
+- Le lexique compte seize connecteurs et dix-sept verbes : un échantillon représentatif,
+  pas un inventaire.

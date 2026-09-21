@@ -1,12 +1,18 @@
-"""Tests du moteur de règles, sans base de données.
+"""Tests du moteur de règles.
 
-Aucune fixture, aucun `client` : les règles ne connaissent que le Document.
-C'est ce qui permet de lancer ce fichier seul devant le jury.
+Les règles lisent leurs listes de mots en base : chaque test tourne donc dans
+une application de test, base en mémoire amorcée (fixture `base_amorcee`).
+Aucun `client` en revanche — on ne passe pas par la route.
 """
+
+import pytest
 
 from app.services.document import build_document
 from app.services.rules import regles, run
 from app.services.rules.fr import ConnecteursLourds, LongueurPhrase
+
+pytestmark = pytest.mark.usefixtures("base_amorcee")
+
 
 PHRASE_LONGUE = (
     "Le présent document décrit la procédure applicable aux demandes déposées "

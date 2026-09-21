@@ -4,7 +4,7 @@ Application Flask qui analyse un texte administratif en français, signale les
 obstacles à la clarté et affiche chaque signalement dans le texte. Référentiel :
 les dix principes de rédaction claire des institutions européennes.
 
-**Échéance : lundi 28 septembre 2026. Gel des fonctionnalités : jeudi 24 septembre.**
+**Échéance : lundi 28 septembre 2026. Gel des fonctionnalités : vendredi 25 septembre au soir.**
 
 ## Collaboration
 
@@ -24,8 +24,16 @@ Ne pas déplacer le dépôt vers WSL.
 ```powershell
 .venv\Scripts\Activate.ps1
 .venv\Scripts\python.exe -m pytest -p no:cacheprovider
+flask db upgrade        # après chaque nouvelle migration
+flask seed              # listes de mots : data/seeds/lexiques.json -> base
 flask run
 ```
+
+Le venv a été créé sous le profil Windows `louis` : `pyvenv.cfg` pointe vers le
+Python de ce profil. Les lanceurs `flask.exe` et `pytest.exe` ont été régénérés
+le 21 septembre ; si un lanceur échoue, `.venv\Scripts\python.exe -m flask ...`
+le contourne. Ne pas recréer le venv avant la soutenance : `requirements.txt`
+n'épingle pas les versions.
 
 L'application répond sur `http://127.0.0.1:5000`. Les variables sont dans `.env`
 et l'exemple est `.env.example`.
@@ -82,7 +90,7 @@ Le HTML est échappé segment par segment avant l'insertion de `<mark>`. Ne jama
 | Extensibilité | Un registre pour les règles, un pour les extracteurs : même motif, deux axes. |
 | Langues | Seuils et lexiques par langue ; une langue non couverte ne doit jamais lever de `KeyError`. |
 | Score | Pas de score global sur 100. |
-| Données | Listes linguistiques versionnées dans le projet, aucune requête réseau à l'exécution. |
+| Données | Listes linguistiques versionnées dans `data/seeds/lexiques.json`, chargées en base par `flask seed` ; aucune requête réseau à l'exécution. |
 
 ## Architecture actuelle
 
@@ -90,8 +98,9 @@ Le HTML est échappé segment par segment avant l'insertion de `<mark>`. Ne jama
 app/
 ├── __init__.py                 create_app(), extensions et /health
 ├── config.py                   configuration par environnement
-├── models/                     modèles SQLAlchemy : DocumentRecord, Analysis, FindingRecord
-├── repositories.py             vide ; future persistance, sans linguistique
+├── cli.py                      commande flask seed
+├── models/                     DocumentRecord, Analysis, FindingRecord, WordList, WordEntry
+├── repositories.py             tout le SQL : amorcer_liste(), lire_liste()
 ├── routes/analyze.py           GET/POST /, orchestration de l'analyse
 ├── routes/admin.py             vide ; future administration
 └── services/
@@ -111,7 +120,7 @@ app/
         ├── base.py             Finding et contrat Rule
         ├── runner.py           registre, regles() et run()
         ├── seuils.py           seuils numériques par langue
-        ├── lexiques.py         connecteurs et verbes avec être
+        ├── lexiques.py         lit les listes en base via le repository
         ├── fr.py               règles françaises
         └── en.py               vide ; extension anglaise future
 ```
@@ -122,7 +131,7 @@ La documentation détaillée de chaque module est dans
 ## État au 21 septembre
 
 Phase 2 close le 18 septembre, import de fichiers compris. Phase 3 en cours,
-gel des fonctionnalités dans trois jours.
+gel des fonctionnalités vendredi 25 au soir.
 
 ### Fait
 
@@ -146,9 +155,15 @@ gel des fonctionnalités dans trois jours.
   texte. Erreurs d'import affichées telles quelles dans le formulaire.
 - Parcours d'erreur : `page()` est le rendu unique de l'écran, partagé par la
   route et par `app_errorhandler(413)` ; `MAX_TEXT_LENGTH` est vérifié côté
-  serveur ; `tests/test_validation.py` couvre les neuf cas.
+  serveur ; `MAX_FORM_MEMORY_SIZE` est aligné sur `MAX_CONTENT_LENGTH` pour
+  qu'un texte trop long reçoive son propre message ; `tests/test_validation.py`
+  couvre les neuf cas.
 - Quatre textes de démonstration dans `exemples/`, dont un `.txt` en cp1252
   qui exerce la détection d'encodage.
+- Listes de mots en base : tables `word_lists` et `word_entries`, amorcées
+  par `flask seed` depuis `data/seeds/lexiques.json` (idempotent : n'ajoute
+  que ce qui manque, n'écrase rien). `lexiques.py` garde ses deux fonctions et
+  lit la base via `repositories.lire_liste()` ; aucune règle n'a changé.
 - Documentation versionnée dans `docs/`, diaporama de soutenance
   (`docs/soutenance.pptx`).
 
@@ -159,24 +174,31 @@ gel des fonctionnalités dans trois jours.
   ambigus pour cette heuristique.
 - Tokenisation `\S+` : la ponctuation reste collée au mot.
 - La route n'enregistre pas encore les analyses en base.
-- L'administration, les repositories et la CLI ne sont pas encore implémentés.
+- L'administration n'existe pas : les listes ne s'éditent pas encore depuis
+  l'interface.
+- Les règles lisent la base : `test_rules.py` et `test_passif.py` tournent dans
+  une application de test amorcée (fixture `base_amorcee`), plus sans base.
+- **Bug silencieux possible** : sur une base migrée mais non amorcée, rien ne
+  plante — `connecteurs_lourds` disparaît des règles actives et `Passif` perd
+  son exclusion des verbes avec *être*. Toujours `flask seed` après
+  `flask db upgrade`.
 - `docx.paragraphs` ignore le texte des tableaux.
-- `MAX_FORM_MEMORY_SIZE` n'est pas encore fixé : un texte collé de plus de
-  500 Ko reçoit le message du 413 au lieu de celui de `MAX_TEXT_LENGTH`.
 
 ## Prochaine priorité
 
-L'import de fichiers étant livré, la phase 3 n'a plus qu'un objet : le
-durcissement. Trois jours avant le gel.
+Objectif de la semaine, jusqu'au gel de vendredi soir : la connexion à la
+base.
 
-1. Fixer `MAX_FORM_MEMORY_SIZE` sur `MAX_CONTENT_LENGTH` dans `config.py`,
-   pour qu'un texte trop long reçoive son message et non celui du 413.
-2. Ajouter `tests/test_normalization.py` pour les six transformations.
-3. Vérifier l'échappement sur un texte contenant `<`, `>` et `&`.
-4. Ensuite seulement : tokenisation fine, règles supplémentaires, configuration,
-   historique et export.
+1. Enregistrer chaque analyse : `DocumentRecord`, `Analysis` et ses
+   `FindingRecord`, via le repository — la route ne touche jamais `db.session`.
+2. ~~Passer en base les connecteurs lourds et les verbes conjugués avec
+   *être*~~ — fait le 21 septembre.
+3. Ajouter `tests/test_normalization.py` pour les six transformations.
+4. Vérifier l'échappement sur un texte contenant `<`, `>` et `&`.
+5. Si le temps reste : une quatrième règle.
 
 Ordre de sacrifice : conteneurisation, export/historique, anglais,
 administration, règles supplémentaires, tokenisation fine.
-Ne jamais sacrifier la chaîne, les quatre règles visées, le surlignage, le
-passif, le durcissement et la répétition de soutenance.
+Ne jamais sacrifier la chaîne, les trois règles livrées, le surlignage, le
+passif, le durcissement et la répétition de soutenance. La quatrième règle est
+facultative depuis le 21 septembre.
