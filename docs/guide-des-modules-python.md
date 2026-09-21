@@ -1,5 +1,8 @@
 # Guide des modules Python
 
+*Pour l'explication ligne par ligne du code de l'import et du lien à la base, voir
+`code-import-et-base.md`.*
+
 État au 21 septembre 2026. Ce document décrit le code réellement présent dans
 `app/`, sans couvrir les tests. Il distingue les modules actifs des emplacements
 préparés pour les phases suivantes.
@@ -139,11 +142,32 @@ le résultat. Elle ne connaît pas non plus les formats : la liste vient de
 `extensions_supportees()`, et le gabarit s'en sert à la fois pour l'attribut
 `accept` du champ de dépôt et pour la ligne qui énumère les formats.
 
-### `app/routes/admin.py` et `app/routes/__init__.py`
+### `app/routes/admin.py`
 
-Fichiers préparés et vides. `admin.py` accueillera les écrans de configuration
-des règles, listes de mots et historique ; il n'est pas encore enregistré dans
-la fabrique d'application.
+Le blueprint `admin`, préfixe `/listes`, enregistré dans la fabrique. Il sert
+l'écran d'édition des listes de mots.
+
+- `LISTES` associe à chaque nom de liste un libellé et un booléen : ses entrées
+  portent-elles un remplacement ? C'est ce qui décide de la colonne affichée et
+  de ce qui est obligatoire à l'ajout.
+- `nettoyer(saisie)` applique `normalize()` puis réduit les espaces. Les règles
+  cherchent les expressions dans le texte normalisé : une apostrophe courbe
+  collée depuis un traitement de texte ne correspondrait jamais sans ce passage.
+- `listes()` (`GET /listes/`) rend toutes les listes.
+- `ajouter(liste_id)` (`POST /listes/<id>/entrees`) nettoie, met l'expression en
+  minuscules — la règle ignore la casse, deux casses feraient un doublon —, puis
+  refuse une expression vide, un remplacement manquant ou un doublon. Pour une
+  liste sans remplacement, un remplacement envoyé est ignoré.
+- `supprimer(entree_id)` (`POST /listes/entrees/<id>/supprimer`).
+
+Les deux routes d'écriture répondent par `flash()` puis une redirection vers
+`/listes/#liste-N` : POST-Redirect-GET, un rafraîchissement ne rejoue rien. Un
+identifiant inconnu donne un 404. Comme `analyze.py`, la route ne touche jamais
+`db.session` : tout passe par le repository.
+
+### `app/routes/__init__.py`
+
+Fichier vide, qui fait de `routes` un paquet.
 
 ---
 
@@ -362,7 +386,7 @@ l'autre.
   une seule table sert les listes avec et sans reformulation.
 
 Les contraintes d'unicité ne sont pas décoratives : ce sont elles qui empêchent
-un doublon le jour où les listes deviendront éditables.
+un doublon, maintenant que les listes sont éditables à l'écran.
 
 ### `app/models/__init__.py`
 
@@ -383,6 +407,16 @@ ne décide rien.
   jointure `word_entries` → `word_lists`. Une liste absente donne un dict vide,
   ce qui est voulu pour une langue non couverte — mais masque aussi une base
   qu'on aurait oublié d'amorcer.
+
+Quatre fonctions servent l'écran d'édition :
+
+- `toutes_les_listes()` — les listes, triées par nom puis par langue.
+- `trouver_liste(liste_id)` — une liste ou `None`.
+- `ajouter_entree(liste, expression, remplacement)` — renvoie `False` si
+  l'expression est déjà dans la liste, sans rien écrire.
+- `supprimer_entree(entree_id)` — renvoie l'expression et l'id de la liste, ou
+  `None`. Les deux valeurs sont lues avant `commit()` : après validation, l'objet
+  supprimé ne peut plus être relu.
 
 L'enregistrement des analyses viendra ici, sous la forme de
 `enregistrer_analyse(...)` : c'est là, et nulle part ailleurs, que se fera la

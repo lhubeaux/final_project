@@ -1,13 +1,8 @@
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <title>Analyseur de langage clair</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
+{% extends "base.html" %}
 
+{% block contenu %}
 <h1>Analyseur de langage clair</h1>
+
 
 <form method="post" enctype="multipart/form-data">
   <textarea id="texte" name="texte" rows="8" maxlength="20000">{{ document.texte if document else '' }}</textarea>
@@ -93,6 +88,8 @@
   </details>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
-</body>
-</html>
+{% endblock %}

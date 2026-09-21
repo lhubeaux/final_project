@@ -92,6 +92,7 @@ app/
 ├── repositories.py        tout le SQL — aucune linguistique
 ├── cli.py                 flask seed : data/seeds/lexiques.json -> base
 ├── routes/analyze.py      GET/POST /
+├── routes/admin.py        /listes/ : écran des listes de mots
 ├── static/                css/style.css · js/app.js
 ├── templates/analyze/index.html
 └── services/
@@ -212,6 +213,16 @@ Elle est allée à Paris.                   -> rien : « aller » se conjugue av
 Une regex `être + participe` signalerait les trois ; l'analyse en dépendances et
 l'heuristique les distinguent. Annoncer le chiffre : 2 sur 6 avec les dépendances seules.
 
+Puis l'écran des listes — la démonstration que les données pilotent les règles :
+
+1. Coller « À cet égard, le dossier est complet. » : aucun connecteur signalé.
+2. Menu → *Listes de mots*, ajouter « à cet égard » → « sur ce point ».
+3. Revenir sur *Analyse*, relancer : « À cet égard » est surligné, avec sa proposition.
+
+Aucun redémarrage : les règles relisent la base à chaque analyse. Faire remarquer
+que la saisie est passée par `normalize()` — c'est l'invariant de D-4 appliqué à
+l'autre bout.
+
 Puis l'import, avec les fichiers de `exemples/` — le même texte dans les quatre
 formats :
 
@@ -274,7 +285,7 @@ la version précédente lisait `self.seuils[document.langue]` et levait un `KeyE
 Le JSON, `data/seeds/lexiques.json`, est la source versionnée (D-12) : git ne suit pas
 la base. La base est la copie d'exécution, et `flask seed` la reconstruit à tout moment.
 L'amorce n'ajoute que ce qui manque et n'écrase jamais rien : on peut la relancer, et
-elle ne détruira pas les ajouts d'un utilisateur le jour où les listes seront éditables.
+elle ne détruit pas les ajouts faits depuis l'écran des listes.
 
 **« Passer les listes en base, ça a obligé à réécrire les règles ? »**
 Non, et c'est le point à faire remarquer. Les règles appelaient déjà
@@ -283,6 +294,12 @@ Seul l'intérieur de ces deux fonctions a changé : elles lisent maintenant la b
 `repositories.lire_liste()`. Le prix, je l'assume : le moteur dépend de la base, donc ses
 tests tournent dans une application de test avec une base en mémoire. La frontière a
 bougé — elle passe désormais entre les règles et le SQL, qui reste confiné au repository.
+
+**« Un utilisateur peut taper n'importe quoi dans l'écran des listes : et si c'était du regex ? »**
+L'expression saisie finit bien dans une expression régulière, mais `_motif()` passe
+chaque mot par `re.escape` : « a.b » cherche un point, pas n'importe quel caractère.
+Et la saisie est d'abord normalisée comme le texte — apostrophes, espaces, casse —,
+sinon une apostrophe courbe collée depuis Word ne correspondrait jamais.
 
 **« Que se passe-t-il si je dépose un fichier de 50 Mo ? »**
 Flask le refuse pendant la lecture du corps de la requête, via `MAX_CONTENT_LENGTH` :
@@ -328,7 +345,10 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
   disparaît et le passif perd son exclusion des verbes avec *être*. Une liste absente
   donne un dict vide — c'est voulu pour une langue non couverte, et c'est le revers du
   même mécanisme. D'où `flask seed` dans les étapes d'installation.
-- Les listes sont en base mais ne s'éditent pas encore depuis l'interface.
+- L'écran des listes n'a ni CSRF ni authentification : application locale,
+  mono-utilisateur. Flask-WTF réglerait le CSRF, au prix d'une dépendance.
+- Une entrée d'origine supprimée à l'écran revient au prochain `flask seed`. Le remède —
+  marquer l'entrée supprimée au lieu de l'effacer — demande une colonne et une migration.
 - L'import lit le corps du document : les tableaux d'un `.docx` et les notes de bas de page sont ignorés.
 - Le choix de l'extracteur se fait sur l'extension, pas sur les octets d'en-tête. Un `.pdf` renommé en `.docx` est refusé par python-docx, donc avec le bon résultat mais pour la mauvaise raison.
 - Les analyses ne sont pas encore enregistrées en base ; les tables et la migration existent.

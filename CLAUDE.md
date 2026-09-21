@@ -100,9 +100,10 @@ app/
 ├── config.py                   configuration par environnement
 ├── cli.py                      commande flask seed
 ├── models/                     DocumentRecord, Analysis, FindingRecord, WordList, WordEntry
-├── repositories.py             tout le SQL : amorcer_liste(), lire_liste()
+├── repositories.py             tout le SQL : amorçage, lecture et édition des listes
 ├── routes/analyze.py           GET/POST /, orchestration de l'analyse
-├── routes/admin.py             vide ; future administration
+├── routes/admin.py             /listes/ : afficher, ajouter, supprimer des entrées
+├── templates/                  base.html (menu commun), analyze/, admin/
 └── services/
     ├── normalization.py        normalisation Unicode et espaces
     ├── segmentation.py         paragraphes et phrases avec pysbd
@@ -147,7 +148,7 @@ gel des fonctionnalités vendredi 25 au soir.
   dépendances seules).
 - Interface : le texte surligné reste visible pendant le défilement des fiches
   sur ordinateur ; une colonne sur mobile.
-- Tests : 28 passent, plus un `xfail` assumé (« La porte est ouverte »), en
+- Tests : 39 passent, plus un `xfail` assumé (« La porte est ouverte »), en
   moins de 3 secondes. L'invariant des positions est aussi vérifié sur
   `Sentence.analyse`.
 - Import de fichiers : registre d'extracteurs, `.txt`, `.md`, `.docx`, `.odt`,
@@ -164,6 +165,11 @@ gel des fonctionnalités vendredi 25 au soir.
   par `flask seed` depuis `data/seeds/lexiques.json` (idempotent : n'ajoute
   que ce qui manque, n'écrase rien). `lexiques.py` garde ses deux fonctions et
   lit la base via `repositories.lire_liste()` ; aucune règle n'a changé.
+- Écran des listes de mots (`/listes/`, menu commun dans `base.html`) :
+  afficher, ajouter, supprimer. La saisie passe par `normalize()` puis en
+  minuscules, pour correspondre au texte analysé ; doublons et remplacement
+  manquant refusés ; POST-Redirect-GET. Une modification vaut dès l'analyse
+  suivante, sans cache ni redémarrage. `tests/test_admin.py` : onze cas.
 - Documentation versionnée dans `docs/`, diaporama de soutenance
   (`docs/soutenance.pptx`).
 
@@ -174,8 +180,12 @@ gel des fonctionnalités vendredi 25 au soir.
   ambigus pour cette heuristique.
 - Tokenisation `\S+` : la ponctuation reste collée au mot.
 - La route n'enregistre pas encore les analyses en base.
-- L'administration n'existe pas : les listes ne s'éditent pas encore depuis
-  l'interface.
+- L'écran des listes n'a ni protection CSRF ni authentification : acceptable pour
+  une application locale mono-utilisateur, à dire à l'oral. Flask-WTF réglerait le
+  CSRF, mais c'est une nouvelle dépendance.
+- Une entrée d'origine supprimée depuis l'écran revient au prochain `flask seed`,
+  qui reprend les entrées manquantes. Les ajouts de l'utilisateur ne sont jamais
+  touchés.
 - Les règles lisent la base : `test_rules.py` et `test_passif.py` tournent dans
   une application de test amorcée (fixture `base_amorcee`), plus sans base.
 - **Bug silencieux possible** : sur une base migrée mais non amorcée, rien ne

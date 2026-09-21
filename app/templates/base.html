@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>{% block titre %}Analyseur de langage clair{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<nav class="menu">
+  <a href="{{ url_for('analyze.index') }}"
+     class="{{ 'actif' if request.blueprint == 'analyze' }}">Analyse</a>
+  <a href="{{ url_for('admin.listes') }}"
+     class="{{ 'actif' if request.blueprint == 'admin' }}">Listes de mots</a>
+</nav>
+
+{% block contenu %}{% endblock %}
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

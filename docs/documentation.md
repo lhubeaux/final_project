@@ -57,7 +57,7 @@ app/
 ├── cli.py                 flask seed : data/seeds/lexiques.json -> base
 ├── routes/
 │   ├── analyze.py         GET/POST /
-│   └── admin.py           écrans de configuration                     (vide)
+│   └── admin.py           /listes/ : écran des listes de mots
 ├── static/
 │   ├── css/style.css      feuille unique, mode sombre
 │   └── js/app.js          lien surlignage ↔ fiche
@@ -287,7 +287,7 @@ Deux migrations : les trois premières tables (`7b70f94273c6`), puis les listes 
 **Les listes de mots sont remplies par `flask seed`.** La source versionnée reste
 `data/seeds/lexiques.json` (D-12) ; la base n'en est que la copie d'exécution.
 `amorcer_liste()` n'ajoute que les entrées absentes et n'écrase jamais rien : relancer
-l'amorce est sans risque, et le restera le jour où les listes deviendront éditables.
+l'amorce est sans risque, y compris depuis que les listes sont éditables à l'écran.
 
 **Les trois premières tables restent vides** : la route n'enregistre pas encore les
 analyses.
@@ -300,7 +300,14 @@ Quand ce sera branché : la route appellera `repositories.enregistrer_analyse(..
 
 ## 7. L'interface
 
-Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
+Deux pages, reliées par un menu commun. `templates/base.html` porte l'en-tête, la
+feuille de style et le menu ; `analyze/index.html` et `admin/listes.html` en héritent
+par `{% extends %}`. Le lien de la page courante reçoit la classe `actif` d'après
+`request.blueprint`.
+
+### La page d'analyse
+
+`templates/analyze/index.html`, servie en `GET` et en `POST`.
 
 - **Le formulaire** — une `textarea`, `maxlength="20000"`, et un champ de dépôt de
   fichier. L'attribut `accept` et la liste des formats affichée sont tous deux produits
@@ -326,6 +333,30 @@ Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
   `start`, son `end`, ce qu'elle transporte et `texte[start:end]` recalculé, en rouge en
   cas d'écart. C'est un outil de vérification, pas une fonctionnalité.
 
+### L'écran des listes de mots
+
+`templates/admin/listes.html`, servi par le blueprint `admin` sous `/listes/`.
+
+- **Une section par liste**, avec son libellé, sa langue et son nombre d'entrées, un
+  tableau trié par expression, un bouton *Supprimer* par ligne et un formulaire
+  d'ajout. Le libellé et la présence d'une colonne *Remplacement* viennent du tableau
+  `LISTES` de `admin.py` ; une liste qui n'y figure pas s'affiche sous son nom brut.
+- **La saisie est normalisée comme le texte analysé** : `nettoyer()` applique
+  `normalize()` puis réduit les espaces, et l'expression passe en minuscules. Sans ça,
+  une apostrophe courbe collée depuis Word ne correspondrait jamais au texte, qui est
+  toujours normalisé — l'invariant de D-4, appliqué à l'autre bout.
+- **Refus** : expression vide, doublon (y compris « Afin DE » face à « afin de »),
+  remplacement manquant pour une liste qui en demande un. Chaque refus ou succès
+  revient par `flash()`, sous forme de bandeau `.erreur` ou `.succes`.
+- **POST-Redirect-GET** : ajout et suppression renvoient une redirection vers
+  `/listes/#liste-N`. Rafraîchir la page ne rejoue pas l'opération, et l'ancre ramène
+  à la liste modifiée.
+- **Effet immédiat** : les règles relisent la base à chaque analyse, il n'y a aucun
+  cache. Une expression ajoutée est surlignée dès le texte suivant, sans redémarrage.
+
+Une expression saisie finit dans une expression régulière, mais `_motif()` passe chaque
+mot par `re.escape` : aucune injection de motif n'est possible.
+
 ---
 
 ## 8. Tests
@@ -341,6 +372,7 @@ Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
 | `test_positions.py` | l'invariant sur les paragraphes, les phrases et les tokens ; le cas du texte vide |
 | `test_rules.py` | longueur de phrase et connecteurs lourds, l'empan de chaque signalement, l'absence de faux positif au milieu d'un mot, l'enregistrement des trois règles, le tri des signalements par position, et qu'une langue non couverte ne fait rien planter |
 | `test_smoke.py` | la route `/health` répond |
+| `test_admin.py` | l'écran des listes, par la route : affichage et menu, ajout pris en compte dès l'analyse suivante, redirection POST-Redirect-GET, saisie normalisée (apostrophe courbe), doublon refusé même en majuscules, remplacement obligatoire, expression vide, verbe sans remplacement, suppression prise en compte, 404 sur un identifiant inconnu |
 | `test_validation.py` | le parcours d'erreur, vu depuis la route : dépassement de 2 Mo (413), texte trop long, texte vide, refus `.pdf` et `.doc` avec leur raison, extension inconnue, `.docx` corrompu, `.txt` en cp1252 décodé, et la priorité du fichier sur la zone de texte |
 | `test_passif.py` | les passifs avec ou sans agent (empan et sévérité), le passif au futur, les faux positifs « Elle est allée » et attributs adjectivaux (« est susceptible », « est nécessaire »), l'invariant des positions sur `Sentence.analyse`, et le cas ambigu « La porte est ouverte » en `xfail` ; le modèle spaCy est chargé par une fixture de portée `session` |
 
@@ -351,7 +383,7 @@ avec `amorcer_lexiques()` — la fonction même qu'utilise `flask seed`. Aucun t
 touche la base réelle. `client` s'appuie sur la même fixture : les tests de la route
 voient donc les mêmes listes que le moteur.
 
-État au 21 septembre : 28 tests passent, plus le `xfail` assumé, en moins de 3 secondes.
+État au 21 septembre : 39 tests passent, plus le `xfail` assumé, en moins de 3 secondes.
 
 **Manque encore** : `test_normalization.py`, qui doit couvrir les six transformations de
 `normalize()`.
@@ -399,6 +431,7 @@ supplémentaires et le script d'amorce : ils entrent dans l'ordre de sacrifice c
 - ✅ documentation technique et diaporama de soutenance (`docs/soutenance.pptx`)
 - ⬜ enregistrement des analyses : `DocumentRecord`, `Analysis`, `FindingRecord`
 - ✅ connecteurs lourds et verbes conjugués avec *être* en base, amorcés par `flask seed`
+- ✅ écran des listes de mots : afficher, ajouter, supprimer ; menu commun
 
 Le durcissement étant bouclé le 21/09, le reste de la semaine va à la connexion à la
 base. Ce choix avance deux lignes de l'ordre de sacrifice — la partie stockage de
@@ -436,7 +469,14 @@ livrées, surlignage, détection du passif, durcissement, répétition.
   perd son exclusion des verbes avec *être* : « Elle est allée » redevient un faux
   positif. Vérifié. Sans la migration, en revanche, l'erreur est bruyante :
   `OperationalError: no such table: word_entries`.
-- Les listes vivent en base, mais aucun écran ne permet encore de les modifier.
+- L'écran des listes n'a ni protection CSRF ni authentification : acceptable pour
+  une application locale mono-utilisateur, à dire à l'oral. Flask-WTF réglerait le
+  CSRF, mais c'est une nouvelle dépendance.
+- Une entrée d'origine supprimée depuis l'écran revient au prochain `flask seed`,
+  qui reprend les entrées manquantes. Les ajouts de l'utilisateur ne sont jamais
+  touchés.
+- On ne modifie pas un remplacement sur place : on supprime l'entrée, puis on la
+  rajoute.
 - `docx.paragraphs` ignore le texte des tableaux, et l'extracteur `.odt` ne lit que les
   paragraphes et les titres. Le corps du document, pas ses annexes.
 - `defusedxml` est bien utilisé, mais par odfpy et non par le code du projet : `odf/opendocument.py` fait `from defusedxml.sax import make_parser`. Le `.odt` est donc lu par un parseur durci, le `.docx` par lxml. La ligne de `requirements.txt` est techniquement redondante, odfpy tirant la dépendance ; elle est **gardée volontairement**, parce qu'elle rend visible dans le fichier des dépendances que le XML des fichiers de bureau est lu par un parseur durci, et qu'elle protège d'un changement de parseur côté odfpy.

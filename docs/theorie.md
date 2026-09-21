@@ -37,7 +37,7 @@ Les sections ne se lisent pas d'une traite. Prends celle dont tu as besoin, écr
 
 **La configuration par variables d'environnement.** `app.config.from_object(Config)` où `Config` lit `os.environ`. Le principe : le code est identique partout, seule la configuration change. C'est ce qui rend une conteneurisation ultérieure presque gratuite.
 
-**POST-Redirect-GET.** Après un POST qui modifie quelque chose, renvoyer une redirection plutôt qu'une page. Sinon un rafraîchissement du navigateur rejoue la soumission. À appliquer sur les écrans *Règles* et *Listes de mots*.
+**POST-Redirect-GET.** Après un POST qui modifie quelque chose, renvoyer une redirection plutôt qu'une page. Sinon un rafraîchissement du navigateur rejoue la soumission. À appliquer sur les écrans *Règles* et *Listes de mots*. *(Appliqué le 21/09 sur l'écran des listes : chaque ajout ou suppression répond par une redirection vers `/listes/#liste-N`.)*
 
 ### Jinja2 — le moteur de gabarits
 

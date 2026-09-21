@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block titre %}Listes de mots — Analyseur de langage clair{% endblock %}
+
+{% block contenu %}
+<h1>Listes de mots</h1>
+
+<p class="formats">Les règles relisent ces listes à chaque analyse : une modification
+s'applique dès le texte suivant. Les listes d'origine viennent de
+<code>data/seeds/lexiques.json</code> : <code>flask seed</code> y reprend les entrées
+manquantes, si bien qu'une entrée d'origine supprimée ici reviendra au prochain
+<code>flask seed</code>. Vos ajouts, eux, ne sont jamais touchés.</p>
+
+{% for categorie, message in get_flashed_messages(with_categories=true) %}
+  <p class="{{ categorie }}">{{ message }}</p>
+{% endfor %}
+
+{% for liste in listes %}
+  {% set libelle, avec_remplacement = descriptions.get(liste.nom, (liste.nom, false)) %}
+  <section class="bloc-liste" id="liste-{{ liste.id }}">
+    <h2>{{ libelle }} <small>{{ liste.langue }} · {{ liste.entrees | length }} entrées</small></h2>
+
+    <table>
+      <tr>
+        <th>Expression</th>
+        {% if avec_remplacement %}<th>Remplacement</th>{% endif %}
+        <th></th>
+      </tr>
+      {% for entree in liste.entrees | sort(attribute="expression") %}
+        <tr>
+          <td>{{ entree.expression }}</td>
+          {% if avec_remplacement %}<td>{{ entree.remplacement }}</td>{% endif %}
+          <td class="action">
+            <form method="post" action="{{ url_for('admin.supprimer', entree_id=entree.id) }}">
+              <button type="submit" class="discret">Supprimer</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+
+    <form method="post" action="{{ url_for('admin.ajouter', liste_id=liste.id) }}" class="ajout">
+      <input name="expression" placeholder="expression" required>
+      {% if avec_remplacement %}
+        <input name="remplacement" placeholder="remplacement" required>
+      {% endif %}
+      <button type="submit">Ajouter</button>
+    </form>
+  </section>
+{% endfor %}
+{% endblock %}

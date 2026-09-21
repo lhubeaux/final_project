@@ -63,3 +63,21 @@ input[type="file"]::file-selector-button:hover { background: #3a4048; }
 .erreur   { border: 1px solid #7a3b3b; border-left: 4px solid #e06c6c;
             background: #2a1d1e; color: #ffd7d7; border-radius: 4px;
             padding: .6rem .8rem; }
+
+/* Menu commun et écran des listes de mots. `.succes` répond à `.erreur`. */
+.menu     { display: flex; gap: 1.2rem; margin: -1rem 0 1.5rem; padding-bottom: .6rem;
+            border-bottom: 1px solid #343a42; }
+.menu a   { color: #9aa2ac; text-decoration: none; padding-bottom: .2rem; }
+.menu a:hover  { color: #e4e4e4; }
+.menu a.actif  { color: #e4e4e4; border-bottom: 2px solid #7fb3ff; }
+.bloc-liste    { margin-bottom: 2.5rem; }
+.bloc-liste table { width: auto; min-width: min(28rem, 100%); }
+td.action      { width: 1%; white-space: nowrap; }
+td.action form { margin: 0; }
+button.discret { padding: .1rem .5rem; font-size: .85rem; color: #e6a3a3; }
+.ajout    { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
+.ajout input { background: #1e2228; color: #e4e4e4; border: 1px solid #3a4048;
+            border-radius: 4px; padding: .35rem .5rem; font-family: inherit; }
+.succes   { border: 1px solid #2f6b50; border-left: 4px solid #4ec99a;
+            background: #1b2a24; color: #d4f5e6; border-radius: 4px;
+            padding: .6rem .8rem; }

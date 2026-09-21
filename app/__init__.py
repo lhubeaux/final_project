@@ -4,7 +4,8 @@ from flask_migrate import Migrate
 from app.cli import seed
 from app.config import Config
 from app.models import db
-from app.routes import analyze
+from app.routes import admin, analyze
+
 
 migrate = Migrate()
 
@@ -17,6 +18,8 @@ def create_app(config_class=Config):
     migrate.init_app(app, db)
 
     app.register_blueprint(analyze.bp)
+    app.register_blueprint(admin.bp)
+
     app.cli.add_command(seed)
 
 

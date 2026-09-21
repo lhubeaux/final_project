@@ -4,7 +4,7 @@ Application web qui analyse un texte administratif ou institutionnel, signale ce
 
 L'outil s'appuie sur les dix principes de rédaction claire des institutions européennes — un référentiel publié et citable, plutôt que des critères inventés pour l'occasion.
 
-> **État : en développement.** Projet de fin de formation, réalisé sur trois semaines. La liste ci-dessous décrit la cible ; voir [Avancement](#avancement) pour ce qui fonctionne aujourd'hui, au 21 septembre 2026. Les écrans de configuration et l'historique n'existent pas encore.
+> **État : en développement.** Projet de fin de formation, réalisé sur trois semaines. La liste ci-dessous décrit la cible ; voir [Avancement](#avancement) pour ce qui fonctionne aujourd'hui, au 21 septembre 2026. L'écran des listes de mots existe ; la configuration des règles et l'historique, pas encore.
 
 ---
 
@@ -78,8 +78,8 @@ app/
 ├── models/                DocumentRecord · Analysis · FindingRecord
 ├── repositories.py        accès aux données — tout le SQL, aucune linguistique
 ├── cli.py                 commande flask seed
-├── routes/                analyze (utilisateur) · admin (configuration, à venir)
-├── templates/ · static/   page d'analyse, CSS, lien surlignage ↔ fiches
+├── routes/                analyze (analyse) · admin (listes de mots)
+├── templates/ · static/   menu commun, page d'analyse, écran des listes, CSS, lien surlignage ↔ fiches
 └── services/
     ├── document.py        build_document() — seul point d'entrée du moteur
     ├── normalization.py   BOM, fins de ligne, NFC, apostrophes, insécables
@@ -152,7 +152,7 @@ L'application répond sur http://127.0.0.1:5000.
 python -m pytest -p no:cacheprovider
 ```
 
-28 tests passent, plus un `xfail` assumé — le cas ambigu *La porte est ouverte*.
+39 tests passent, plus un `xfail` assumé — le cas ambigu *La porte est ouverte*.
 
 Les règles lisent leurs listes de mots en base : leurs tests tournent dans une application de test dont la base, en mémoire, est amorcée à chaque test. Aucun test n'a besoin de la base réelle ni d'un serveur.
 
@@ -221,7 +221,8 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - [x] Durcissement : erreur 413, `MAX_TEXT_LENGTH` côté serveur, tests du parcours d'erreur
 - [x] Listes de mots en base, amorcées depuis un fichier versionné
 - [ ] Enregistrement des analyses
-- [ ] Écrans de configuration
+- [x] Écran des listes de mots : afficher, ajouter, supprimer — effet dès l'analyse suivante
+- [ ] Écran de configuration des règles
 - [ ] Historique, export, jeu de règles anglais
 - [ ] Conteneurisation *(bonus — non attendue dans l'évaluation)*
 
@@ -232,13 +233,17 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - *La porte est ouverte* et *Il est convaincu* peuvent être signalés comme passifs : l'analyse grammaticale ne tranche pas, le français ne distinguant pas formellement le passif d'état du passif d'action.
 - La tokenisation actuelle découpe sur les espaces : la ponctuation reste collée au mot.
 - Les analyses ne sont pas encore enregistrées en base.
+- L'écran des listes n'a ni protection CSRF ni authentification : l'application est pensée pour un usage local, par une seule personne.
+- Une entrée d'origine supprimée depuis l'écran revient au prochain `flask seed`, qui reprend les entrées manquantes du fichier d'amorce.
 - L'import ne lit que le corps du document : les tableaux d'un `.docx` sont ignorés, ainsi que les notes de bas de page.
 - `fr_core_news_md` a été comparé à `fr_core_news_sm` sur le jeu d'essai du passif : aucun gain constaté. Le projet conserve donc le modèle léger, seul référencé dans `requirements.txt`.
 - Le chargement du modèle spaCy occupe quelques centaines de mégaoctets au démarrage.
 
 ## Documentation
 
-Le dossier `docs/` rassemble la documentation technique, le guide des modules Python, l'intégration de spaCy, les décisions de conception, le plan de travail, un mémo théorique et les supports de soutenance.
+Le dossier `docs/` rassemble la documentation technique, le guide des modules Python, l'explication ligne par ligne du code de l'import et du lien à la base (`code-import-et-base.md`), l'intégration de spaCy, les décisions de conception, le plan de travail, un mémo théorique et les supports de soutenance.
+
+`exemples/` contient des textes à déposer dans l'analyseur : une notification dans les quatre formats acceptés, et `paragraphes-de-test.txt`, huit paragraphes qui exercent chacun un comportement précis — le résultat attendu de chacun est décrit dans `docs/code-import-et-base.md`, §21.
 
 ## Licence
 

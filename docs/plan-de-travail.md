@@ -150,7 +150,7 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 
 **Fin de phase :** un jury peut manipuler l'application sans la casser, et le dépôt se lit tout seul.
 
-> **État au 21/09, à l'ouverture de la phase.** Chaîne complète, surlignage, trois règles sur les quatre visées, import des quatre formats, 28 tests plus un `xfail`, documentation et diaporama faits.
+> **État au 21/09, à l'ouverture de la phase.** Chaîne complète, surlignage, trois règles sur les quatre visées, import des quatre formats, 28 tests plus un `xfail`, documentation et diaporama faits. *(En fin de journée : 39 tests.)*
 >
 > **L'import étant livré avec la phase 2, la phase 3 n'a plus qu'un objet : le durcissement.** Fait le 21/09 : l'erreur 413 rend désormais la page du formulaire avec son bandeau, `MAX_TEXT_LENGTH` est vérifié côté serveur, `MAX_FORM_MEMORY_SIZE` est aligné sur `MAX_CONTENT_LENGTH`, et `tests/test_validation.py` couvre le parcours d'erreur. Reste `tests/test_normalization.py`.
 >
@@ -158,7 +158,7 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 >
 > Le prix de ce choix est à connaître : le gel repoussé prend le vendredi qui était réservé à la répétition. Il reste le week-end.
 >
-> **Fait le 21/09 :** les connecteurs lourds et les verbes conjugués avec *être* sont en base — tables `word_lists` et `word_entries`, amorce `flask seed` depuis `data/seeds/lexiques.json`, `lexiques.py` qui lit la base. Reste l'enregistrement des analyses.
+> **Fait le 21/09 :** les connecteurs lourds et les verbes conjugués avec *être* sont en base — tables `word_lists` et `word_entries`, amorce `flask seed` depuis `data/seeds/lexiques.json`, `lexiques.py` qui lit la base. Même jour : l'écran d'édition des listes (`/listes/`) et le menu commun. Reste l'enregistrement des analyses, prévu le 22/09.
 
 ### Contenu
 
@@ -202,7 +202,7 @@ Par ordre de sacrifice, du plus facile au plus douloureux. Coupe **dans cet ordr
 1. Conteneurisation et mise en ligne
 2. Export et historique
 3. Jeu de règles anglais — mais savoir expliquer comment il s'ajouterait
-4. Écrans de configuration — remplaçables par des données d'amorce en base
+4. Écrans de configuration — remplaçables par des données d'amorce en base *(l'écran des listes est fait le 21/09 ; celui des règles reste ici)*
 5. ~~Import `.odt`, puis `.docx`~~ — *fait le 18/09, sorti de la liste*
 6. La quatrième règle et au-delà
 7. La tokenisation fine — un découpage grossier tient debout

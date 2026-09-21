@@ -46,7 +46,7 @@ Chaque décision porte un identifiant, pour que les autres documents y renvoient
 - Analyse d'un texte à la fois **(D-1)**.
 - Français d'abord, anglais ensuite ; ajout d'autres langues facilité par la conception.
 - Seuils définis par langue **(D-11)**.
-- Listes de mots amorcées depuis des sources publiées, puis complétées par l'utilisateur.
+- Listes de mots amorcées depuis des sources publiées, puis complétées par l'utilisateur. *(Fait le 21/09 : amorce `flask seed`, écran `/listes/`.)*
 
 ### Écarté
 
