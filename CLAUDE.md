@@ -37,7 +37,9 @@ mais n'a montré aucun gain sur le jeu d'essai : ne pas l'ajouter aux dépendanc
 ## Pipeline et invariant central
 
 ```text
-texte brut
+saisie ou fichier
+  -> extraire(nom_fichier, flux)        # chemin fichier seulement
+  -> texte brut
   -> normalize()
   -> segment()
   -> tokenize()
@@ -50,6 +52,9 @@ texte brut
 
 `build_document(texte_brut, langue="fr")` est le seul point d'entrée du moteur.
 Il normalise une fois, puis le texte normalisé devient l'unique référence.
+
+Un extracteur rend du texte **brut** et ne normalise jamais : sinon les deux
+chemins d'entrée produiraient deux textes de référence différents.
 
 **Invariant :** pour chaque fragment, token ou signalement :
 
@@ -69,12 +74,12 @@ Le HTML est échappé segment par segment avant l'insertion de `<mark>`. Ne jama
 | Sujet | Décision |
 |---|---|
 | Entrée | Un texte à la fois ; français d'abord. |
-| Formats | Prévoir `.txt`, `.md`, `.docx`, `.odt` ; refuser `.pdf` et `.doc`. |
+| Formats | `.txt`, `.md`, `.docx`, `.odt` acceptés ; `.pdf` et `.doc` refusés avec un message dédié. |
 | Objet des règles | `check(document)` reçoit le `Document` métier, jamais Flask ou spaCy. |
 | spaCy | Seul `services/linguistics.py` importe spaCy. Les règles lisent `Sentence.analyse`. |
 | Signalement | Toute règle renvoie un `Finding` avec un empan absolu. |
 | Persistance | `Finding` est une dataclass de transport ; `FindingRecord` est le modèle SQLAlchemy. |
-| Extensibilité | Registre pour les règles, et plus tard pour les extracteurs. |
+| Extensibilité | Un registre pour les règles, un pour les extracteurs : même motif, deux axes. |
 | Langues | Seuils et lexiques par langue ; une langue non couverte ne doit jamais lever de `KeyError`. |
 | Score | Pas de score global sur 100. |
 | Données | Listes linguistiques versionnées dans le projet, aucune requête réseau à l'exécution. |
@@ -96,7 +101,12 @@ app/
     ├── linguistics.py          chargement spaCy et TokenLinguistique
     ├── document.py             dataclasses métier et build_document()
     ├── rendering.py            échappement HTML et surlignage
-    ├── extraction/             structure vide pour les imports futurs
+    ├── extraction/
+    │   ├── registry.py         registre, extraire() et erreurs d'import
+    │   ├── txt.py              décodage sans encodage déclaré
+    │   ├── md.py               décodage txt puis retrait des marques
+    │   ├── docx.py             paragraphes via python-docx
+    │   └── odt.py              paragraphes et titres via odfpy
     └── rules/
         ├── base.py             Finding et contrat Rule
         ├── runner.py           registre, regles() et run()
@@ -109,7 +119,10 @@ app/
 La documentation détaillée de chaque module est dans
 `docs/guide-des-modules-python.md`.
 
-## État au 15 septembre
+## État au 21 septembre
+
+Phase 2 close le 18 septembre, import de fichiers compris. Phase 3 en cours,
+gel des fonctionnalités dans trois jours.
 
 ### Fait
 
@@ -125,8 +138,19 @@ La documentation détaillée de chaque module est dans
   dépendances seules).
 - Interface : le texte surligné reste visible pendant le défilement des fiches
   sur ordinateur ; une colonne sur mobile.
-- Tests : 19 passent ; « La porte est ouverte » est un `xfail` assumé.
-  L'invariant des positions est aussi vérifié sur `Sentence.analyse`.
+- Tests : 28 passent, plus un `xfail` assumé (« La porte est ouverte »), en
+  moins de 3 secondes. L'invariant des positions est aussi vérifié sur
+  `Sentence.analyse`.
+- Import de fichiers : registre d'extracteurs, `.txt`, `.md`, `.docx`, `.odt`,
+  refus explicite de `.pdf` et `.doc`. Le fichier l'emporte sur la zone de
+  texte. Erreurs d'import affichées telles quelles dans le formulaire.
+- Parcours d'erreur : `page()` est le rendu unique de l'écran, partagé par la
+  route et par `app_errorhandler(413)` ; `MAX_TEXT_LENGTH` est vérifié côté
+  serveur ; `tests/test_validation.py` couvre les neuf cas.
+- Quatre textes de démonstration dans `exemples/`, dont un `.txt` en cp1252
+  qui exerce la détection d'encodage.
+- Documentation versionnée dans `docs/`, diaporama de soutenance
+  (`docs/soutenance.pptx`).
 
 ### Limites connues
 
@@ -135,20 +159,24 @@ La documentation détaillée de chaque module est dans
   ambigus pour cette heuristique.
 - Tokenisation `\S+` : la ponctuation reste collée au mot.
 - La route n'enregistre pas encore les analyses en base.
-- Les extracteurs de fichiers, l'administration, les repositories et la CLI ne
-  sont pas encore implémentés.
+- L'administration, les repositories et la CLI ne sont pas encore implémentés.
+- `docx.paragraphs` ignore le texte des tableaux.
+- `MAX_FORM_MEMORY_SIZE` n'est pas encore fixé : un texte collé de plus de
+  500 Ko reçoit le message du 413 au lieu de celui de `MAX_TEXT_LENGTH`.
 
 ## Prochaine priorité
 
-1. Implémenter l'import de fichiers : registre d'extracteurs, `.txt`, `.md`,
-   `.docx`, puis `.odt`.
-2. Ajouter validation serveur : texte vide, longueur maximale, format refusé,
-   taille de fichier et fichier corrompu.
-3. Ajouter `tests/test_normalization.py` pour les six transformations.
+L'import de fichiers étant livré, la phase 3 n'a plus qu'un objet : le
+durcissement. Trois jours avant le gel.
+
+1. Fixer `MAX_FORM_MEMORY_SIZE` sur `MAX_CONTENT_LENGTH` dans `config.py`,
+   pour qu'un texte trop long reçoive son message et non celui du 413.
+2. Ajouter `tests/test_normalization.py` pour les six transformations.
+3. Vérifier l'échappement sur un texte contenant `<`, `>` et `&`.
 4. Ensuite seulement : tokenisation fine, règles supplémentaires, configuration,
    historique et export.
 
 Ordre de sacrifice : conteneurisation, export/historique, anglais,
-administration, `.odt`/`.docx`, règles supplémentaires, tokenisation fine.
+administration, règles supplémentaires, tokenisation fine.
 Ne jamais sacrifier la chaîne, les quatre règles visées, le surlignage, le
 passif, le durcissement et la répétition de soutenance.

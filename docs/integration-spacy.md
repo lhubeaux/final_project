@@ -1,6 +1,7 @@
 # Intégration de spaCy
 
-*Mis à jour le 15 septembre 2026. Intégration réalisée avec `fr_core_news_sm` 3.8.0.*
+*Relu le 21 septembre 2026. Intégration réalisée le 15 septembre avec
+`fr_core_news_sm` 3.8.0 ; le code n'a pas bougé depuis.*
 
 **En une phrase :** pysbd découpe, spaCy analyse chaque phrase, `linguistics.py` traduit en objets maison, `build_document()` les rattache, les règles ne voient jamais spaCy.
 
@@ -103,4 +104,7 @@ Rappel (D-14) : `aux:pass` / `nsubj:pass` seuls obtiennent **2 sur 6** sur les p
 5. ✅ **Règle `Passif`** — l'absence d'agent augmente la sévérité.
 6. ✅ **Comparaison `fr_core_news_md`** — mêmes résultats que `sm` sur sept phrases : le modèle moyen reste installé pour essai, mais n'est pas ajouté à `requirements.txt`.
 
-**Jalon du 18/09 :** *la décision a été prise* est-elle distinguée de *elle est allée à Paris* ?
+**Jalon du 18/09 — atteint.** *La décision a été prise* est distinguée de *elle est
+allée à Paris* : la première est signalée, la seconde écartée par la liste des verbes
+conjugués avec *être*. Les deux cas qui restent ouverts — *la porte est ouverte*, *il est
+convaincu* — sont documentés et assumés, l'un par un test `xfail`.

@@ -1,6 +1,6 @@
 # Environnement de développement
 
-*Mise à jour : 15 septembre 2026 — phase 2 en cours.*
+*Mise à jour : 21 septembre 2026 — phase 3 en cours.*
 
 *Ce document dit **comment le projet tourne**. Les décisions de conception sont dans [synthese-projet-langage-clair.md](synthese-projet-langage-clair.md), le calendrier dans [plan-de-travail.md](plan-de-travail.md).*
 
@@ -24,9 +24,9 @@ L'application ne change pas d'un environnement à l'autre : une application Flas
 | Emplacement | `C:\Users\louis\Documents\PythonFS\final_project` |
 | Environnement | `.venv` local |
 | Dépendances | installées, modèle spaCy français compris |
-| Tests | `pytest` découvert par VS Code ; 19 passent, plus un `xfail` assumé |
+| Tests | `pytest` découvert par VS Code ; 28 passent, plus un `xfail` assumé |
 
-**Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1. `fr_core_news_md` 3.8.0 est aussi présent pour comparaison, mais le projet utilise `sm` et seul ce dernier est épinglé dans `requirements.txt`.
+**Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1. *`defusedxml` n'est pas importé par le code du projet mais par odfpy, qui l'utilise pour lire le XML d'un `.odt`. La ligne de `requirements.txt` est donc redondante et peut être retirée — le paquet, lui, reste installé comme dépendance d'odfpy.* `fr_core_news_md` 3.8.0 est aussi présent pour comparaison, mais le projet utilise `sm` et seul ce dernier est épinglé dans `requirements.txt`.
 
 > **Le risque d'installation de spaCy est écarté.** Le modèle français s'importe et s'exécute. C'est un point d'ordonnancement : le plan initial différait spaCy pour limiter ce risque, qui n'existe plus. Voir [plan-de-travail.md](plan-de-travail.md), principe 3.
 
@@ -90,7 +90,7 @@ final_project/
 │   │   ├── analyze.py         # saisie, résultats
 │   │   └── admin.py           # règles, listes de mots, historique (vide)
 │   ├── services/
-│   │   ├── extraction/        # fichiers vides, prévus pour l'import
+│   │   ├── extraction/        # registre + un module par format
 │   │   │   ├── registry.py    # interface commune + enregistrement
 │   │   │   ├── txt.py
 │   │   │   ├── docx.py
@@ -160,7 +160,7 @@ pytest
 FLASK_APP=app
 FLASK_DEBUG=1
 SECRET_KEY=changez-moi
-DATABASE_URL=sqlite:///instance/analyseur.db
+DATABASE_URL=sqlite:///analyseur.db
 MAX_TEXT_LENGTH=20000
 MAX_UPLOAD_BYTES=2097152
 ```
@@ -214,4 +214,4 @@ Le reste — formatage, linter, configuration de débogage — peut attendre le 
 
 **Tranché : `docs/` est versionné.** La synthèse des décisions montre qu'une réflexion a précédé le code : formats refusés avec leurs raisons, rejet du score sur 100, arbitrage sur les règles proportionnelles. C'est ce qu'un jury ou un recruteur cherche et trouve rarement.
 
-`theorie.md` et `soutenance.md` sont des mémos personnels. Ils peuvent rester dans le dépôt ou être ajoutés à `.gitignore` avant la livraison.
+`theorie.md`, `soutenance.md` et `soutenance.pptx` sont des mémos personnels. Ils peuvent rester dans le dépôt ou être ajoutés à `.gitignore` avant la livraison.

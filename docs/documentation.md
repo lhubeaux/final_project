@@ -1,6 +1,6 @@
 # Analyseur de langage clair — documentation technique
 
-État au 15 septembre 2026, phase 2 en cours.
+État au 21 septembre 2026, phase 3 en cours.
 Document de référence : ce que le code fait aujourd'hui, et pourquoi il le fait ainsi.
 Pour l'oral, voir plutôt `soutenance.md`, qui est un aide-mémoire de questions-réponses.
 
@@ -67,7 +67,12 @@ app/
     ├── tokenization.py    \S+ avec report de position
     ├── rendering.py       surligner() — échappement puis balisage
     ├── linguistics.py     point de contact unique avec spaCy, TokenLinguistique
-    ├── extraction/        registre + un module par format             (vide)
+    ├── extraction/
+    │   ├── registry.py    registre, extraire(), erreurs d'import
+    │   ├── txt.py         décodage d'octets sans encodage déclaré
+    │   ├── md.py          décodage txt puis retrait des marques
+    │   ├── docx.py        paragraphes (python-docx)
+    │   └── odt.py         paragraphes et titres dans l'ordre (odfpy)
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (classe abstraite)
         ├── runner.py      registre plat, enregistrer / regles / run
@@ -94,6 +99,9 @@ Le détail de chaque module est dans `guide-des-modules-python.md`.
 ## 4. La chaîne de traitement
 
 ```
+saisie                fichier
+  │                     └─ extraire()   registre par extension -> texte brut
+  └─────────┬───────────┘
 texte brut
   └─ normalisation      BOM · CRLF · NFC · soft hyphen · apostrophes · insécables
       └─ segmentation   paragraphes, puis phrases (pysbd), sans franchir les blocs
@@ -107,6 +115,32 @@ texte brut
 Un seul point d'entrée : `build_document(texte_brut, langue="fr")`. La normalisation s'y
 fait une fois pour toutes (D-4) : il devient impossible de fabriquer un `Document` dont
 le texte ne serait pas le texte de référence.
+
+### Les deux chemins d'entrée
+
+Une zone de texte, ou un fichier. Le fichier l'emporte quand les deux sont remplis : le
+déposer est le geste le plus explicite.
+
+`extraire(nom_fichier, flux)` choisit l'extracteur d'après la seule extension. Le nom
+vient du client, il ne sert qu'à ce choix et jamais à écrire sur le disque.
+
+| Format | Module | Ce qu'il fait |
+|---|---|---|
+| `.txt` | `txt.py` | UTF-8 d'abord — il est auto-vérifiant — puis `charset-normalizer` restreint à sept candidats — les encodages rencontrés dans l'Union. Un fichier indéchiffrable est refusé plutôt que rendu en mojibake : la segmentation et l'étiquetage porteraient sur des mots qui n'existent pas, sans lever la moindre erreur. |
+| `.md` | `md.py` | Le décodage du `.txt`, puis six expressions régulières qui retirent titres, citations, puces, emphases, accents de code, et gardent le libellé des liens sans leur URL. Aucune dépendance ajoutée : Markdown est une convention d'écriture, pas un format de fichier. |
+| `.docx` | `docx.py` | Les paragraphes via python-docx, joints par une ligne vide. |
+| `.odt` | `odt.py` | Les paragraphes et titres via odfpy, parcourus en profondeur pour garder l'ordre de lecture — `getElementsByType()` grouperait tous les paragraphes puis tous les titres. |
+
+La ligne vide entre deux blocs n'est pas cosmétique : c'est ce que `segment()` attend
+pour délimiter un paragraphe.
+
+**Un extracteur rend du texte brut et ne normalise jamais.** S'il normalisait, les deux
+chemins d'entrée produiraient deux textes de référence différents et D-4 tomberait.
+
+`.pdf` et `.doc` ont une entrée dédiée dans `_REFUS` : un message qui dit pourquoi vaut
+mieux qu'un « format inconnu » (D-2). Les trois erreurs d'import — `FormatNonSupporte`,
+`FichierIllisible`, et `ExtractionError` dont elles héritent — portent un message écrit
+pour être montré tel quel ; la route ne le reformule pas.
 
 ### L'invariant des positions
 
@@ -253,9 +287,18 @@ Quand ce sera branché : la route appellera `repositories.enregistrer_analyse(..
 
 Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
 
-- **Le formulaire** — une `textarea`, `maxlength="20000"`. Après analyse, elle réaffiche
-  `document.texte`, c'est-à-dire le texte **normalisé** : l'utilisateur récupère ses
-  apostrophes redressées. C'est cohérent avec D-4 et assumé.
+- **Le formulaire** — une `textarea`, `maxlength="20000"`, et un champ de dépôt de
+  fichier. L'attribut `accept` et la liste des formats affichée sont tous deux produits
+  par `extensions_supportees()` : enregistrer un extracteur de plus suffit à les mettre
+  à jour. Après analyse, la zone réaffiche `document.texte`, c'est-à-dire le texte
+  **normalisé** : l'utilisateur récupère ses apostrophes redressées. C'est cohérent
+  avec D-4 et assumé.
+- **Le bandeau d'erreur** — un `<p class="erreur">` au-dessus des résultats, alimenté
+  par le message de l'`ExtractionError`, par le dépassement de `MAX_TEXT_LENGTH`, ou
+  par « Aucun texte à analyser. » quand la saisie est vide.
+- **Un rendu unique** — `page()` dans `routes/analyze.py`. La route et le gestionnaire
+  d'erreur y passent tous deux, si bien qu'une page d'erreur reste une page d'analyse :
+  le formulaire est toujours là, la liste des formats aussi.
 - **Colonne de gauche** — le texte surligné. Chaque `<mark>` porte ses classes
   (`signalement r-longueur_phrase`) et un `data-findings="0,3"` listant les rangs des
   signalements qui le couvrent.
@@ -283,15 +326,20 @@ Une seule page, `templates/analyze/index.html`, servie en `GET` et en `POST`.
 | `test_positions.py` | l'invariant sur les paragraphes, les phrases et les tokens ; le cas du texte vide |
 | `test_rules.py` | longueur de phrase et connecteurs lourds, l'empan de chaque signalement, l'absence de faux positif au milieu d'un mot, l'enregistrement des trois règles, le tri des signalements par position, et qu'une langue non couverte ne fait rien planter |
 | `test_smoke.py` | la route `/health` répond |
+| `test_validation.py` | le parcours d'erreur, vu depuis la route : dépassement de 2 Mo (413), texte trop long, texte vide, refus `.pdf` et `.doc` avec leur raison, extension inconnue, `.docx` corrompu, `.txt` en cp1252 décodé, et la priorité du fichier sur la zone de texte |
 | `test_passif.py` | les passifs avec ou sans agent (empan et sévérité), le passif au futur, les faux positifs « Elle est allée » et attributs adjectivaux (« est susceptible », « est nécessaire »), l'invariant des positions sur `Sentence.analyse`, et le cas ambigu « La porte est ouverte » en `xfail` ; le modèle spaCy est chargé par une fixture de portée `session` |
 
 `test_rules.py` n'importe ni `create_app` ni `db` : c'est la démonstration concrète que le
 moteur est isolé de la base.
 
-État au 15 septembre : 19 tests passent, plus le `xfail` assumé, en moins de 5 secondes.
+État au 21 septembre : 28 tests passent, plus le `xfail` assumé, en moins de 3 secondes.
 
 **Manque encore** : `test_normalization.py`, qui doit couvrir les six transformations de
-`normalize()` ; les tests de validation serveur et d'import de fichiers.
+`normalize()`.
+
+Les fichiers de `exemples/` servent la démonstration, pas les tests : un texte de
+notification administrative dans les quatre formats acceptés. Le `.txt` est enregistré
+en cp1252, ce qui exerce la détection d'encodage au lieu de la contourner.
 
 ---
 
@@ -308,28 +356,42 @@ moteur est isolé de la base.
 - ✅ écran de résultats : surlignage, fiches, compte par règle, lien dans les deux sens
 - ⬜ tests de la normalisation
 
-**Phase 2** (→ ven 18/09) : spaCy et détection du passif *(priorité absolue)*, import de
-fichiers, tokenisation fine, deux règles de plus.
+**Phase 2 — close le ven 18/09** : spaCy et détection du passif *(priorité absolue)*,
+import de fichiers, tokenisation fine, deux règles de plus.
 - ✅ spaCy analyse les phrases séparées par `pysbd` et projette ses tokens dans `Sentence.analyse`
 - ✅ règle `passif`, affichée par le mécanisme générique de surlignage
-- ✅ comparaison `fr_core_news_sm` / `md` : aucun gain, `sm` conservé
-- ⬜ import de fichiers : registre d'extracteurs, `.txt`, `.md`, `.docx`, puis `.odt`
-- ⬜ tokenisation fine, règles supplémentaires
-
 - ✅ jeu d'essai du passif complété ; attributs adjectivaux exclus
+- ✅ comparaison `fr_core_news_sm` / `md` : aucun gain, `sm` conservé
+- ✅ import de fichiers : registre d'extracteurs, `.txt`, `.md`, `.docx`, `.odt`, refus
+  explicites de `.pdf` et `.doc`, quatre textes de démonstration dans `exemples/`
+- ⬜ tokenisation fine, deux règles de plus
 
-**Prochaine priorité** : implémenter l'import de fichiers, puis la validation serveur (texte vide, longueur maximale, format refusé, taille de fichier,
-fichier corrompu).
+Les points 1 à 3 sont tenus. Restent la tokenisation fine, les deux règles
+supplémentaires et le script d'amorce : ils entrent dans l'ordre de sacrifice ci-dessous.
 
-**Phase 3** (→ jeu 24/09) : durcissement, documentation, écrans de configuration, puis
-historique / export / anglais / conteneurisation.
+**Phase 3 — en cours** (lun 21 → jeu 24/09) : durcissement, documentation, écrans de
+configuration, puis historique / export / anglais / conteneurisation.
+- ✅ texte vide refusé côté serveur ; format non pris en charge, fichier corrompu et
+  encodage non reconnu affichés dans le bandeau d'erreur
+- ✅ erreur 413 : `app_errorhandler` rend la page du formulaire avec son bandeau
+- ✅ `MAX_TEXT_LENGTH` vérifié côté serveur
+- ✅ `tests/test_validation.py` — neuf cas du parcours d'erreur
+- ⬜ `MAX_FORM_MEMORY_SIZE` aligné sur `MAX_CONTENT_LENGTH` dans `config.py`
+- ⬜ `tests/test_normalization.py`
+- ✅ documentation technique et diaporama de soutenance (`docs/soutenance.pptx`)
+
+L'import de fichiers étant livré avec la phase 2, la phase 3 n'a plus qu'un objet : le
+durcissement. C'est ce que demande le jalon du 24/09 — un inconnu manipule l'application
+dix minutes sans la casser.
 
 Gel des fonctionnalités : jeudi 24 septembre. Soutenance : lundi 28 septembre 2026.
 
 ### Ordre de sacrifice si le retard s'installe
 
 Conteneurisation → export et historique → jeu de règles anglais → écrans de configuration
-→ import `.odt` puis `.docx` → règles au-delà des quatre premières → tokenisation fine.
+→ règles au-delà des quatre premières → tokenisation fine.
+
+*L'import `.odt` et `.docx` a quitté cette liste : il est fait.*
 
 **Jamais sacrifié :** normalisation, segmentation, moteur de règles, quatre règles,
 surlignage, détection du passif, durcissement, journée de répétition.
@@ -338,8 +400,10 @@ surlignage, détection du passif, durcissement, journée de répétition.
 
 ## 10. Limites connues
 
-- `maxlength="20000"` n'existe que côté navigateur. `request.form["texte"]` n'est pas
-  tronqué côté serveur : un `curl` contourne la limite. Point de durcissement, phase 3.
+- Flask 3.1 plafonne les champs non-fichier à `MAX_FORM_MEMORY_SIZE`, 500 000 octets par
+  défaut, et lève un 413 avant la route. Un texte collé de plus de 500 Ko reçoit donc le
+  message du dépassement de taille au lieu de celui de `MAX_TEXT_LENGTH`. Aligner les
+  deux plafonds dans `config.py` corrige le message.
 - « s'agissant **des** pièces » n'est pas détecté — `des` n'est ni `de` ni `d'`. Le lexique
   traite des locutions figées, pas la morphologie.
 - La tokenisation est un `\S+` : la ponctuation reste collée au mot. Suffisant pour
@@ -347,7 +411,10 @@ surlignage, détection du passif, durcissement, journée de répétition.
 - « La porte est ouverte » et « Il est convaincu » peuvent être signalés comme passifs :
   spaCy étiquette le participe `VERB`, et état et passif restent ambigus pour cette
   heuristique.
-- La route n'enregistre pas les analyses en base ; l'import de fichiers n'existe pas encore.
+- La route n'enregistre pas les analyses en base.
+- `docx.paragraphs` ignore le texte des tableaux, et l'extracteur `.odt` ne lit que les
+  paragraphes et les titres. Le corps du document, pas ses annexes.
+- `defusedxml` est bien utilisé, mais par odfpy et non par le code du projet : `odf/opendocument.py` fait `from defusedxml.sax import make_parser`. Le `.odt` est donc lu par un parseur durci, le `.docx` par lxml. La ligne de `requirements.txt` est redondante — odfpy tire la dépendance — mais le paquet ne doit pas être désinstallé.
 - Le champ `Document.spacy_doc` subsiste mais n'est pas utilisé : les règles lisent
   `Sentence.analyse`.
 - Le surlignage n'est cliquable qu'à la souris. Le rendre accessible au clavier demande un

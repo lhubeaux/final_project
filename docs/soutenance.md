@@ -1,6 +1,6 @@
 # Soutenance — aide-mémoire
 
-Analyseur de langage clair. État au 15 septembre 2026, phase 2 en cours.
+Analyseur de langage clair. État au 21 septembre 2026, phase 3 en cours.
 Documentation technique complète : `documentation.md` et `guide-des-modules-python.md`.
 
 ---
@@ -20,6 +20,9 @@ Un score invite à optimiser le chiffre ; on veut faire lire le texte.
 ## 2. La chaîne de traitement
 
 ```
+saisie                fichier
+  │                     └─ extraire()   un extracteur par extension
+  └─────────┬───────────┘
 texte brut
   └─ normalisation      BOM, CRLF, NFC, soft hyphen, apostrophes, insécables
       └─ segmentation   pysbd, sans franchir les paragraphes
@@ -33,6 +36,9 @@ texte brut
 Un seul point d'entrée : `build_document(texte_brut, langue="fr")`. La normalisation
 s'y fait une fois pour toutes (D-4) : il est impossible de fabriquer un `Document`
 dont le texte ne serait pas le texte de référence.
+
+Les deux chemins d'entrée se rejoignent avant la normalisation. Un extracteur rend du
+texte **brut** : s'il normalisait lui-même, il y aurait deux textes de référence.
 
 ---
 
@@ -93,7 +99,7 @@ app/
     ├── normalization.py · segmentation.py · tokenization.py
     ├── rendering.py       surligner()
     ├── linguistics.py     unique point de contact avec spaCy
-    ├── extraction/        registre + un module par format (à venir)
+    ├── extraction/        registry · txt · md · docx · odt
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (ABC)
         ├── runner.py      registre plat + run()
@@ -206,10 +212,30 @@ Elle est allée à Paris.                   -> rien : « aller » se conjugue av
 Une regex `être + participe` signalerait les trois ; l'analyse en dépendances et
 l'heuristique les distinguent. Annoncer le chiffre : 2 sur 6 avec les dépendances seules.
 
+Puis l'import, avec les fichiers de `exemples/` — le même texte dans les quatre
+formats :
+
+```
+notification.txt    cp1252, pas UTF-8 : la détection d'encodage travaille
+notification.md     les marques sont retirées, les libellés de liens gardés
+notification.docx   paragraphes joints par une ligne vide
+notification.odt    paragraphes et titres, dans l'ordre de lecture
+```
+
+Montrer que les quatre donnent les **mêmes** signalements : c'est la démonstration que
+l'extraction est bien en amont de la chaîne et ne la contamine pas. Puis déposer un
+`.pdf` : le message dit pourquoi le format est refusé, il ne dit pas « format inconnu ».
+
 Enfin, sans base de données ni serveur :
 
 ```powershell
 .venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_rules.py tests/test_passif.py -v
+```
+
+Et le parcours d'erreur, qui passe lui par la route :
+
+```powershell
+.venv\Scripts\python.exe -m pytest -p no:cacheprovider tests/test_validation.py -v
 ```
 
 ---
@@ -249,6 +275,29 @@ passe déjà par `connecteurs_lourds(document.langue)` : le jour où cette fonct
 base, aucune règle ne change. Et le dict Python restera, comme graine du `seed` et comme
 source en test — parce que les tests du moteur ne doivent pas avoir besoin d'une base.
 
+**« Que se passe-t-il si je dépose un fichier de 50 Mo ? »**
+Flask le refuse pendant la lecture du corps de la requête, via `MAX_CONTENT_LENGTH` :
+la route n'est jamais appelée, donc aucun `try` ne pourrait l'attraper. C'est
+`@bp.app_errorhandler(413)` qui répond, et il rend la même page que la route — le
+formulaire avec son bandeau d'erreur — en conservant le code 413, parce que rien n'a
+été analysé. Le rendu est partagé par une fonction `page()` : une page d'erreur reste
+une page d'analyse.
+
+**« Pourquoi un extracteur est-il une fonction, alors qu'une règle est une classe ? »**
+Parce qu'un extracteur n'a rien à porter : pas d'identifiant, pas de sévérité, pas de
+principe de rattachement. Une règle porte les quatre, et le gabarit les affiche. Le
+registre suit la même différence : une liste parcourue en entier pour les règles, un
+dictionnaire indexé par extension pour les extracteurs, puisqu'on en cherche un seul.
+
+**« Comment devinez-vous l'encodage d'un `.txt` ? »**
+On essaie l'UTF-8 d'abord : il est dominant et auto-vérifiant, des octets qui n'en sont
+pas échouent au lieu de produire un faux texte. Sinon `charset-normalizer` tranche, mais
+sur une liste restreinte à sept candidats, les encodages rencontrés dans l'Union — sur un texte court, son heuristique
+peut élire un encodage asiatique. Si rien ne convient, on refuse le fichier. Rendre du
+mojibake serait pire : la segmentation et l'étiquetage porteraient sur des mots qui
+n'existent pas, sans lever la moindre erreur. `exemples/notification.txt` est enregistré
+en cp1252 exprès.
+
 **« Pourquoi `.pdf` est-il refusé ? »**
 Un PDF n'a pas de structure de paragraphes fiable : l'extraction produit des coupures de
 ligne arbitraires qui feraient mentir la segmentation, donc les positions, donc le
@@ -266,6 +315,9 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
   pour compter des mots ; la tokenisation fine reste à faire.
 - Le lexique compte seize entrées. C'est un échantillon représentatif, pas un inventaire.
 - Un seul texte à la fois, pas d'historique, pas d'export : phase 3.
+- L'import lit le corps du document : les tableaux d'un `.docx` et les notes de bas de page sont ignorés.
+- Le choix de l'extracteur se fait sur l'extension, pas sur les octets d'en-tête. Un `.pdf` renommé en `.docx` est refusé par python-docx, donc avec le bon résultat mais pour la mauvaise raison.
+- Un texte collé de plus de 500 Ko reçoit le message du dépassement de taille au lieu de celui de la longueur maximale : Flask 3.1 plafonne les champs non-fichier à part, et les deux plafonds ne sont pas encore alignés.
 - Les analyses ne sont pas encore enregistrées en base ; les tables et la migration existent.
 - « La porte est ouverte » et « Il est convaincu » restent signalés : la frontière entre état et passif est ambiguë. Le premier cas est documenté par un test `xfail`. Score : 4 sur 6 sur les phrases de référence, contre 2 sur 6 avec les dépendances seules.
 - Les attributs adjectivaux (« est susceptible de ») ne sont plus signalés depuis le 15/09 : la règle exige un participe étiqueté `VERB`.

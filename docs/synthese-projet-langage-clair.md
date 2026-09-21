@@ -1,6 +1,6 @@
 # Analyseur de langage clair — décisions de conception
 
-*Mise à jour : 15 septembre 2026.*
+*Mise à jour : 21 septembre 2026.*
 
 *Ce document dit **quoi** et **pourquoi**. Le calendrier est dans [plan-de-travail.md](plan-de-travail.md), l'environnement dans [setup-projet-vscode.md](setup-projet-vscode.md), les révisions de soutenance dans [theorie.md](theorie.md).*
 
@@ -23,7 +23,7 @@ Chaque décision porte un identifiant, pour que les autres documents y renvoient
 | Réf. | Décision | Motif en une ligne |
 |---|---|---|
 | **D-1** | Un texte à la fois ; français d'abord, anglais ensuite | Le périmètre tient dans le temps disponible |
-| **D-2** | `.txt`, `.docx`, `.odt`, `.md` acceptés ; `.pdf` et `.doc` refusés | L'extraction PDF casse la segmentation, donc la mesure centrale |
+| **D-2** | `.txt`, `.docx`, `.odt`, `.md` acceptés ; `.pdf` et `.doc` refusés | L'extraction PDF casse la segmentation, donc la mesure centrale — *mis en œuvre le 18/09, avec un message de refus par format* |
 | **D-3** | `check()` reçoit un objet `Document` maison | Fige l'interface des règles avant d'en écrire |
 | **D-4** | Normaliser une fois à l'entrée ; le texte normalisé fait référence | La normalisation change la longueur de la chaîne |
 | **D-5** | Toute règle renvoie un empan de caractères | Une seule forme à traiter côté affichage |
@@ -101,6 +101,10 @@ Or les `Finding` portent des empans de caractères **(D-5)**.
 - Vérification des octets d'en-tête plutôt que de l'extension.
 - `defusedxml` pour parser `.docx` et `.odt`, qui sont des archives ZIP contenant du XML non fiable.
 
+**Mise en œuvre, 18 septembre.** Les deux premiers points sont tenus : `txt.py` essaie l'UTF-8 d'abord puis restreint `charset-normalizer` à sept encodages européens, et refuse plutôt que de rendre du mojibake ; `.docx` et `.odt` joignent leurs blocs par une ligne vide, que `segment()` lit comme une frontière de paragraphe.
+
+Les deux derniers ne le sont pas, et c'est un écart assumé à énoncer. Le choix de l'extracteur se fait sur l'**extension**, pas sur les octets d'en-tête : un fichier mal nommé est refusé par la bibliothèque, avec un message d'erreur exact mais pour la mauvaise raison. Quant à `defusedxml`, il travaille — mais pas depuis le code du projet : c'est odfpy qui l'appelle, `odf/opendocument.py` faisant `from defusedxml.sax import make_parser`. Le `.odt` est donc bien lu par un parseur durci ; le `.docx` passe par lxml. La ligne de `requirements.txt` est redondante puisque odfpy tire la dépendance, mais le paquet reste nécessaire.
+
 ---
 
 ## 5. Architecture
@@ -115,6 +119,8 @@ Une interface commune, plusieurs implémentations, un dictionnaire qui associe u
 - **Règles** (`services/rules/`) : chaque règle expose `check(document) -> list[Finding]`, avec un identifiant, un principe de rattachement, une sévérité et un message.
 
 Savoir dire en soutenance que c'est **la même idée employée à deux endroits** vaut mieux que de décrire les deux séparément.
+
+**Mise en œuvre, 18 septembre : les deux registres existent, et la différence entre eux se défend.** Une règle est une classe — elle porte quatre attributs d'identité et une méthode. Un extracteur est une simple fonction `Callable[[BinaryIO], str]`, parce qu'il n'a rien à porter : pas d'identifiant, pas de sévérité, pas de principe. Le registre des règles est une liste parcourue en entier à chaque analyse ; celui des extracteurs est un dictionnaire indexé par extension, puisqu'on en cherche exactement un. Même idée, deux formes que le besoin dicte.
 
 ### D-3 — Ce que reçoit `check()`
 
@@ -179,7 +185,7 @@ Tokenisation **à l'import**, avec position enregistrée. Champs par token : for
 
 Prévoir un **numéro de version du tokeniseur** par document et une commande de retokenisation : le tokeniseur *sera* modifié en cours de route.
 
-*État au 15 septembre :* seule la tokenisation grossière existe (`\S+`, ponctuation collée au mot). D-15 et les cas ci-dessus relèvent de la tokenisation fine, pas encore commencée. La colonne `version_tokeniseur` existe déjà dans `DocumentRecord`.
+*État au 21 septembre :* seule la tokenisation grossière existe (`\S+`, ponctuation collée au mot). D-15 et les cas ci-dessus relèvent de la tokenisation fine, pas encore commencée. La colonne `version_tokeniseur` existe déjà dans `DocumentRecord`.
 
 > **Ordonnancement :** une tokenisation grossière suffit en phase 1 ; la version fine arrive en phase 2. Voir [plan-de-travail.md](plan-de-travail.md).
 
@@ -187,7 +193,7 @@ Prévoir un **numéro de version du tokeniseur** par document et une commande de
 
 ## 7. Les règles
 
-*État au 15 septembre : trois règles livrées — `longueur_phrase`, `connecteurs_lourds` et `passif`. Le jargon et les nominalisations restent à écrire.*
+*État au 21 septembre : trois règles livrées — `longueur_phrase`, `connecteurs_lourds` et `passif`. Le jargon et les nominalisations restent à écrire.*
 
 ### Les quatre premières — quatre principes différents
 

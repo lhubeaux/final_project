@@ -32,8 +32,8 @@ C'est le contrat minimum. Tout le reste est négociable.
 |---|---|
 | lun 07/09 | **Phase 0** — socle *(fait)* |
 | lun 07 → ven 11/09 | **Phase 1** — la chaîne complète, en version minimale |
-| lun 14 → ven 18/09 | **Phase 2** — ce qui rend le projet intéressant |
-| lun 21 → jeu 24/09 | **Phase 3** — rendre présentable |
+| lun 14 → ven 18/09 | **Phase 2** — ce qui rend le projet intéressant *(close)* |
+| lun 21 → jeu 24/09 | **Phase 3** — rendre présentable *(en cours)* |
 | **jeu 24/09 au soir** | **Gel des fonctionnalités** |
 | ven 25 → dim 27/09 | Répétition de la soutenance |
 | **lun 28/09** | Livraison |
@@ -114,7 +114,11 @@ L'import de fichiers. Une zone de texte suffit à boucler la chaîne, et l'extra
 
 **1. spaCy et la détection du passif.** C'est la pièce maîtresse de la soutenance, et elle passe avant tout le reste de la phase.
 
-*État au 15/09 : réalisé, points 1 et 2. `linguistics.py` analyse chaque phrase isolée et la règle `passif` est couverte par des tests ; la comparaison `fr_core_news_sm` / `md` sur sept phrases n'a montré aucun gain pour `md`. Jeu d'essai élargi (passif au futur, attributs adjectivaux) ; score de 4 sur 6 sur les phrases de référence. Prochaine étape : l'import de fichiers (point 3).*
+*Bilan de phase, 18/09 : points 1 et 2 réalisés et mesurés. `linguistics.py` analyse chaque phrase isolée, la règle `passif` est couverte par des tests, la comparaison `fr_core_news_sm` / `md` sur sept phrases n'a montré aucun gain pour `md`. Jeu d'essai élargi (passif au futur, attributs adjectivaux) ; score de 4 sur 6 sur les phrases de référence.*
+
+*Point 3 réalisé le 18/09 : registre d'extracteurs, `.txt`, `.md`, `.docx`, `.odt`, refus explicites de `.pdf` et `.doc`, quatre textes de démonstration dans `exemples/`. Un écart au cahier des charges du point : le choix de l'extracteur se fait sur l'extension et non sur les octets d'en-tête. `defusedxml`, lui, est bien à l'œuvre sur le `.odt`, mais appelé par odfpy et non par le code du projet.*
+
+*Points 4 à 6 non réalisés : tokenisation fine, deux règles de plus, script d'amorce. Ils entrent dans l'ordre de sacrifice.*
 
 - Chargement du modèle **une seule fois** au démarrage, derrière `services/linguistics.py`.
 - **Le jeu d'essai d'abord, la règle ensuite.** Une vingtaine de phrases : passifs véritables, et faux positifs classiques (*elle est allée*, *la porte est ouverte*, *il est convaincu*).
@@ -142,9 +146,15 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 
 ## Phase 3 — Rendre présentable
 
-**→ jeudi 24 septembre**
+**→ jeudi 24 septembre — en cours depuis le lundi 21.**
 
 **Fin de phase :** un jury peut manipuler l'application sans la casser, et le dépôt se lit tout seul.
+
+> **État au 21/09, à l'ouverture de la phase.** Chaîne complète, surlignage, trois règles sur les quatre visées, import des quatre formats, 28 tests plus un `xfail`, documentation et diaporama faits.
+>
+> **L'import étant livré avec la phase 2, la phase 3 n'a plus qu'un objet : le durcissement.** Fait le 21/09 : l'erreur 413 rend désormais la page du formulaire avec son bandeau, `MAX_TEXT_LENGTH` est vérifié côté serveur, et `tests/test_validation.py` couvre le parcours d'erreur. Restent `MAX_FORM_MEMORY_SIZE` dans la configuration et `tests/test_normalization.py`.
+>
+> **Une décision reste à prendre**, et elle n'est pas technique : « quatre règles fonctionnelles » figure ci-dessous parmi ce qui n'est jamais sacrifié, et il n'y en a que trois. Soit la quatrième s'écrit — le jargon est une entrée de lexique de plus, une demi-journée — soit la liste descend à trois et c'est assumé à l'oral. Ne pas laisser la question ouverte jusqu'au 24.
 
 ### Contenu
 
@@ -189,7 +199,7 @@ Par ordre de sacrifice, du plus facile au plus douloureux. Coupe **dans cet ordr
 2. Export et historique
 3. Jeu de règles anglais — mais savoir expliquer comment il s'ajouterait
 4. Écrans de configuration — remplaçables par des données d'amorce en base
-5. Import `.odt`, puis `.docx` — la zone de texte suffit à démontrer
+5. ~~Import `.odt`, puis `.docx`~~ — *fait le 18/09, sorti de la liste*
 6. Les règles au-delà des quatre premières
 7. La tokenisation fine — un découpage grossier tient debout
 
@@ -223,5 +233,5 @@ Trois moments où l'on s'arrête pour constater, honnêtement, où l'on en est.
 | Date | Question | Si la réponse est non |
 |---|---|---|
 | **ven 11/09** | Est-ce que je colle un texte et vois des signalements surlignés ? | Retirer des règles jusqu'à ce que oui, avant de toucher à spaCy. |
-| **ven 18/09** | Est-ce que la détection du passif distingue *la décision a été prise* de *elle est allée à Paris* ? | Garder ce qui marche, documenter les cas qui échouent, passer à la phase 3. Un taux d'erreur mesuré et assumé se défend très bien. |
+| **ven 18/09** | Est-ce que la détection du passif distingue *la décision a été prise* de *elle est allée à Paris* ? | ✅ **Oui.** 4 sur 6 sur les phrases de référence, contre 2 sur 6 avec les dépendances seules ; les deux échecs sont documentés, dont un en `xfail`. |
 | **jeu 24/09** | Est-ce qu'un inconnu peut manipuler l'application dix minutes sans la casser ? | Geler quand même et corriger. Le gel n'est pas négociable. |

@@ -1,6 +1,6 @@
 # Guide des modules Python
 
-État au 15 septembre 2026. Ce document décrit le code réellement présent dans
+État au 21 septembre 2026. Ce document décrit le code réellement présent dans
 `app/`, sans couvrir les tests. Il distingue les modules actifs des emplacements
 préparés pour les phases suivantes.
 
@@ -9,6 +9,7 @@ préparés pour les phases suivantes.
 ```text
 requête HTTP POST /
   -> routes/analyze.py : index()
+  -> services/extraction/registry.py : extraire(nom, flux)   (si un fichier est déposé)
   -> services/document.py : build_document(texte_brut, langue="fr")
        -> normalize()
        -> segment()
@@ -88,17 +89,37 @@ que l'amorce des listes de mots et la retokenisation.
 Le blueprint `bp` porte la route `index()` sur `GET /` et `POST /`.
 
 - En `GET`, elle affiche simplement le formulaire.
-- En `POST`, elle lit `request.form["texte"]`, appelle
-  `build_document(texte_brut, langue="fr")`, exécute `run(document)`, puis
-  appelle `surligner(document.texte, findings)`.
+- En `POST`, elle prend le texte à la source la plus explicite : un fichier
+  déposé s'il y en a un, sinon `request.form["texte"]`. Un fichier passe par
+  `extraire(fichier.filename, fichier.stream)`.
+- Une `ExtractionError` est attrapée là, et son message est affiché tel quel :
+  il a été écrit pour l'utilisateur, la route ne le reformule pas.
+- Un texte vide — saisie blanche, ou fichier dont l'extraction ne rend rien —
+  n'est pas analysé : la route rend « Aucun texte à analyser. »
+- Sinon elle appelle `build_document(texte_brut, langue="fr")`, exécute
+  `run(document)`, puis `surligner(document.texte, findings)`.
 - `Counter` calcule le nombre de signalements par règle, y compris zéro. La liste
   est fondée sur `regles(document.langue)`, pas seulement sur les règles qui ont
   trouvé quelque chose.
-- Elle transmet `document`, `findings`, `texte_surligne` et `resume` à
-  `render_template("analyze/index.html", ...)`.
+- Elle rend la page par `page(...)`, la fonction de rendu unique du module :
+  elle passe `document`, `findings`, `texte_surligne`, `resume` et `erreur`,
+  et `page()` ajoute toujours `extensions`.
+
+`page()` existe parce que la route n'est pas le seul chemin vers cet écran.
+`envoi_trop_volumineux()`, décoré par `@bp.app_errorhandler(413)`, y passe aussi :
+Flask refuse une requête trop lourde pendant la lecture de son corps, avant de la
+router, donc `index()` n'est jamais appelée et aucun `try` ne pourrait l'attraper.
+Le gestionnaire est déclaré `app_errorhandler` et non `errorhandler` — un 413 levé
+avant le routage n'appartient à aucun blueprint — et il renvoie bien le code 413 :
+rien n'a été analysé.
+
+Entre les deux, la route vérifie `MAX_TEXT_LENGTH`. L'attribut `maxlength` du
+gabarit n'existe que dans le navigateur ; un envoi direct le contourne.
 
 La route ne connaît ni spaCy ni SQLAlchemy : elle orchestre les services et rend
-le résultat.
+le résultat. Elle ne connaît pas non plus les formats : la liste vient de
+`extensions_supportees()`, et le gabarit s'en sert à la fois pour l'attribut
+`accept` du champ de dépôt et pour la ligne qui énumère les formats.
 
 ### `app/routes/admin.py` et `app/routes/__init__.py`
 
@@ -320,21 +341,88 @@ Les règles ne devront jamais l'importer.
 
 ---
 
-## Extraction de fichiers : structure préparée
+## Extraction de fichiers
 
-Le dossier `app/services/extraction/` contient actuellement des fichiers vides :
-`registry.py`, `txt.py`, `md.py`, `docx.py`, `odt.py` et `__init__.py`.
+### `app/services/extraction/registry.py`
 
-Ils sont réservés à la phase d'import : un registre choisira un extracteur par
-format, puis chaque extracteur renverra du texte avant son passage obligatoire
-dans `build_document(texte_brut, langue="fr")`. Les formats ciblés sont `.txt`,
-`.md`, `.docx` et `.odt`; `.pdf` et `.doc` resteront refusés.
+Le second registre du projet, bâti sur le même motif que celui des règles.
+
+- `_registre` associe une extension à une fonction `Extracteur`, c'est-à-dire
+  `Callable[[BinaryIO], str]`. Un extracteur est une fonction, pas une classe :
+  il n'a aucun état à porter.
+- `@enregistrer(".txt")` range la fonction décorée sous une ou plusieurs
+  extensions.
+- `extensions_supportees()` renvoie les extensions triées. Le gabarit s'en sert
+  pour l'attribut `accept` et pour la ligne des formats : ajouter un extracteur
+  met l'interface à jour sans y toucher.
+- `extraire(nom_fichier, flux)` choisit d'après la seule extension. Le nom vient
+  du client : il ne sert qu'à ce choix, jamais à écrire sur le disque.
+
+Trois exceptions, toutes filles d'`ExtractionError` et toutes porteuses d'un
+message écrit pour être affiché tel quel : `FormatNonSupporte` quand l'extension
+n'a pas d'extracteur, `FichierIllisible` quand le fichier a la bonne extension
+mais ne s'ouvre pas.
+
+Le dictionnaire `_REFUS` traite à part `.pdf` et `.doc` (D-2) : ils ne sont pas
+absents du registre par hasard, ils sont refusés pour une raison, et le message
+la donne.
+
+**Un extracteur rend du texte brut.** La normalisation reste le travail de
+`build_document()` : un extracteur qui normaliserait lui-même donnerait un second
+texte de référence, et l'invariant des positions ne tiendrait plus.
+
+### `app/services/extraction/txt.py`
+
+`decoder(donnees: bytes) -> str` est le cœur du module, et il est partagé avec
+`md.py`.
+
+L'encodage n'est écrit nulle part dans un fichier texte : il faut le deviner.
+UTF-8 est essayé d'abord — via `utf_8_sig`, qui retire le BOM éventuel — parce
+qu'il est dominant et auto-vérifiant : des octets qui n'en sont pas échouent au
+lieu de produire un faux texte. Sinon `charset-normalizer` tranche, mais sur une
+liste restreinte (`cp1252`, `iso8859_15`, `cp1250`, `cp1251`, `cp1253`,
+`utf_16`) : sur un texte court, son heuristique peut élire un encodage asiatique
+et rendre des idéogrammes.
+
+Si rien ne convient, `FichierIllisible` est levée. Refuser vaut mieux que rendre
+des « Ã© » : sur du mojibake, la segmentation et l'étiquetage seraient faux sans
+lever la moindre erreur.
+
+### `app/services/extraction/md.py`
+
+Markdown n'est pas un format de fichier mais une convention d'écriture : le
+décodage est celui d'un `.txt`. Six expressions régulières retirent ensuite les
+marques — titres, citations, puces, accents de code, emphases — pour qu'elles ne
+soient pas comptées comme des mots, et gardent le libellé d'un lien en jetant son
+URL. Volontairement minimal, et sans dépendance nouvelle.
+
+### `app/services/extraction/docx.py` et `odt.py`
+
+Les deux formats sont des archives ZIP contenant du XML où l'encodage est
+déclaré : aucune devinette. Les deux extracteurs joignent les blocs par une ligne
+vide, parce que c'est ce que `segment()` attend pour délimiter un paragraphe.
+
+- `docx.py` lit `docx.paragraphs` via python-docx. Le texte des tableaux est
+  ignoré.
+- `odt.py` descend l'arbre en profondeur avec `_parcourir()` et retient les
+  balises `text:p` et `text:h`. `getElementsByType()` aurait groupé tous les
+  paragraphes puis tous les titres : l'ordre de lecture serait perdu.
+
+Les deux enveloppent l'ouverture dans un `try` large — les bibliothèques lèvent
+des types variés sur un fichier corrompu — et relèvent `FichierIllisible`.
+
+### `app/services/extraction/__init__.py`
+
+Réexporte l'interface publique et importe les quatre modules de format, ce qui
+déclenche leur enregistrement. Même mécanisme que `rules/__init__.py`.
 
 ---
 
 ## Frontières à respecter
 
 - Une route orchestre ; elle ne fait ni linguistique ni SQL brut.
+- Un extracteur rend du texte brut ; il ne normalise pas, ne segmente pas et
+  ne connaît pas Flask.
 - `build_document(...)` est le seul point d'entrée de la chaîne linguistique.
 - `linguistics.py` est le seul module qui importe spaCy.
 - Une règle reçoit un `Document` et renvoie des `Finding`; elle ne connaît ni

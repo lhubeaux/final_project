@@ -4,7 +4,7 @@ Application web qui analyse un texte administratif ou institutionnel, signale ce
 
 L'outil s'appuie sur les dix principes de rédaction claire des institutions européennes — un référentiel publié et citable, plutôt que des critères inventés pour l'occasion.
 
-> **État : en développement.** Projet de fin de formation, réalisé sur trois semaines. Voir [Avancement](#avancement) pour ce qui fonctionne aujourd'hui.
+> **État : en développement.** Projet de fin de formation, réalisé sur trois semaines. La liste ci-dessous décrit la cible ; voir [Avancement](#avancement) pour ce qui fonctionne aujourd'hui, au 21 septembre 2026. Les écrans de configuration et l'historique n'existent pas encore.
 
 ---
 
@@ -39,7 +39,7 @@ Ces défauts sont repérables automatiquement. C'est ce que fait cette applicati
 
 Deux idées structurent le code, et la seconde est la première appliquée une deuxième fois.
 
-**Un registre d'extracteurs.** Une interface commune — recevoir un fichier, renvoyer du texte avec ses paragraphes — et une implémentation par format. Ajouter un format se réduit à une classe et une ligne d'enregistrement.
+**Un registre d'extracteurs.** Une interface commune — recevoir un flux binaire, renvoyer du texte brut — et une implémentation par format. Ajouter un format se réduit à une fonction et une ligne d'enregistrement : `@enregistrer(".rtf")`. Un extracteur ne normalise jamais le texte qu'il rend, faute de quoi les deux chemins d'entrée produiraient deux textes de référence différents.
 
 **Un registre de règles.** Chaque règle est une classe autonome exposant `check(document) -> list[Finding]`. L'exécutant filtre par langue et par configuration. Ajouter une règle ne touche à aucun code existant.
 
@@ -87,12 +87,13 @@ app/
     ├── tokenization.py    tokens avec positions absolues
     ├── linguistics.py     unique point de contact avec spaCy
     ├── rendering.py       échappement HTML puis surlignage
-    ├── extraction/        registre + un module par format (à venir)
+    ├── extraction/        registry · txt · md · docx · odt
     └── rules/             base · runner · seuils · lexiques · fr · en
 data/seeds/                listes de mots versionnées
+exemples/                  textes de démonstration, un par format
 migrations/                migrations Alembic
 tests/
-docs/                      décisions de conception, programme, théorie
+docs/                      décisions de conception, plan de travail, théorie
 ```
 
 Le découpage suit les axes qui grossissent réellement — les formats, les règles, les langues — plutôt que des couches architecturales qu'on risquerait de ne jamais remplir. Un dossier se justifie à partir de trois fichiers de même nature ; en dessous, un module suffit.
@@ -142,6 +143,8 @@ L'application répond sur http://127.0.0.1:5000.
 python -m pytest -p no:cacheprovider
 ```
 
+28 tests passent, plus un `xfail` assumé — le cas ambigu *La porte est ouverte*.
+
 Le moteur de règles ne connaît pas la base de données : sa suite de tests s'exécute en isolation, sans fixture de persistance.
 
 ---
@@ -155,7 +158,7 @@ Le moteur de règles ne connaît pas la base de données : sa suite de tests s'e
 | Segmentation | `pysbd` | Gère les abréviations et les nombres par langue, là où un découpage sur le point échoue |
 | Analyse grammaticale | spaCy | L'analyse en dépendances permet de distinguer un passif véritable d'un passé composé avec *être* |
 | Encodage | `charset-normalizer` | Un fichier n'annonce pas son encodage : il faut le deviner |
-| Parsage XML | `defusedxml` | `.docx` et `.odt` sont des archives ZIP contenant du XML non fiable |
+| Lecture `.docx` / `.odt` | `python-docx`, `odfpy` | Deux archives ZIP contenant du XML ; chaque bibliothèque lit la sienne, et l'encodage y est déclaré — aucune devinette |
 
 ### La détection du passif
 
@@ -190,21 +193,23 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - [x] Dépôt, environnement, dépendances
 - [x] Fabrique d'application et route de santé
 
-**Phase 1 — La chaîne complète, en version minimale**
+**Phase 1 — La chaîne complète, en version minimale** *(close le 11/09)*
 - [x] Modèle de données : `DocumentRecord`, `Analysis`, `FindingRecord` et leur migration
 - [x] Normalisation et segmentation
 - [x] Moteur de règles et deux premières règles (longueur de phrase, connecteurs lourds)
 - [x] Écran de résultats avec surlignage
 - [ ] Tests de la normalisation
 
-**Phase 2 — Analyse grammaticale**
-- [x] Intégration de spaCy et détection du passif
-- [ ] Import de fichiers
+**Phase 2 — Analyse grammaticale** *(close le 18/09)*
+- [x] Intégration de spaCy et détection du passif — 4 phrases de référence sur 6
+- [x] Jeu d'essai du passif, attributs adjectivaux écartés
+- [x] Import de fichiers : `.txt`, `.md`, `.docx`, `.odt`, avec refus explicites
 - [ ] Tokenisation fine
 - [ ] Deux règles supplémentaires
 
-**Phase 3 — Finition**
-- [ ] Durcissement et parcours d'erreur
+**Phase 3 — Finition** *(en cours, gel des fonctionnalités le 24/09)*
+- [x] Documentation technique et guide des modules
+- [x] Durcissement : erreur 413, `MAX_TEXT_LENGTH` côté serveur, tests du parcours d'erreur
 - [ ] Écrans de configuration
 - [ ] Historique, export, jeu de règles anglais
 - [ ] Conteneurisation *(bonus — non attendue dans l'évaluation)*
@@ -215,14 +220,16 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - Les suggestions se copient mais ne s'appliquent pas automatiquement : corriger le texte invaliderait toutes les positions affichées et supposerait de relancer l'analyse.
 - *La porte est ouverte* et *Il est convaincu* peuvent être signalés comme passifs : l'analyse grammaticale ne tranche pas, le français ne distinguant pas formellement le passif d'état du passif d'action.
 - La tokenisation actuelle découpe sur les espaces : la ponctuation reste collée au mot.
-- Les analyses ne sont pas encore enregistrées en base, et l'import de fichiers n'est pas encore branché.
+- Les analyses ne sont pas encore enregistrées en base.
+- L'import ne lit que le corps du document : les tableaux d'un `.docx` sont ignorés, ainsi que les notes de bas de page.
+- Un texte collé de plus de 500 Ko reçoit le message du dépassement de taille plutôt que celui de la longueur maximale : `MAX_FORM_MEMORY_SIZE` reste à fixer.
 - La longueur maximale du texte n'est contrôlée que côté navigateur pour l'instant.
 - `fr_core_news_md` a été comparé à `fr_core_news_sm` sur le jeu d'essai du passif : aucun gain constaté. Le projet conserve donc le modèle léger, seul référencé dans `requirements.txt`.
 - Le chargement du modèle spaCy occupe quelques centaines de mégaoctets au démarrage.
 
 ## Documentation
 
-Le dossier `docs/` rassemble la documentation technique, le guide des modules Python, l'intégration de spaCy, les décisions de conception, le plan de travail et un mémo théorique.
+Le dossier `docs/` rassemble la documentation technique, le guide des modules Python, l'intégration de spaCy, les décisions de conception, le plan de travail, un mémo théorique et les supports de soutenance.
 
 ## Licence
 
