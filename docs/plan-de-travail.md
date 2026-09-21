@@ -116,7 +116,7 @@ L'import de fichiers. Une zone de texte suffit à boucler la chaîne, et l'extra
 
 *Bilan de phase, 18/09 : points 1 et 2 réalisés et mesurés. `linguistics.py` analyse chaque phrase isolée, la règle `passif` est couverte par des tests, la comparaison `fr_core_news_sm` / `md` sur sept phrases n'a montré aucun gain pour `md`. Jeu d'essai élargi (passif au futur, attributs adjectivaux) ; score de 4 sur 6 sur les phrases de référence.*
 
-*Point 3 réalisé le 18/09 : registre d'extracteurs, `.txt`, `.md`, `.docx`, `.odt`, refus explicites de `.pdf` et `.doc`, quatre textes de démonstration dans `exemples/`. Un écart au cahier des charges du point : le choix de l'extracteur se fait sur l'extension et non sur les octets d'en-tête. `defusedxml`, lui, est bien à l'œuvre sur le `.odt`, mais appelé par odfpy et non par le code du projet.*
+*Point 3 réalisé le 18/09 : registre d'extracteurs, `.txt`, `.md`, `.docx`, `.odt`, refus explicites de `.pdf` et `.doc`, quatre textes de démonstration dans `exemples/`. Un écart au cahier des charges du point : le choix de l'extracteur se fait sur l'extension et non sur les octets d'en-tête. `defusedxml`, lui, est bien à l'œuvre sur le `.odt`, mais appelé par odfpy et non par le code du projet ; la ligne de `requirements.txt` est gardée pour rendre la protection explicite.*
 
 *Points 4 à 6 non réalisés : tokenisation fine, deux règles de plus, script d'amorce. Ils entrent dans l'ordre de sacrifice.*
 

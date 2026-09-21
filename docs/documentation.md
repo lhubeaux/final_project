@@ -414,7 +414,7 @@ surlignage, détection du passif, durcissement, journée de répétition.
 - La route n'enregistre pas les analyses en base.
 - `docx.paragraphs` ignore le texte des tableaux, et l'extracteur `.odt` ne lit que les
   paragraphes et les titres. Le corps du document, pas ses annexes.
-- `defusedxml` est bien utilisé, mais par odfpy et non par le code du projet : `odf/opendocument.py` fait `from defusedxml.sax import make_parser`. Le `.odt` est donc lu par un parseur durci, le `.docx` par lxml. La ligne de `requirements.txt` est redondante — odfpy tire la dépendance — mais le paquet ne doit pas être désinstallé.
+- `defusedxml` est bien utilisé, mais par odfpy et non par le code du projet : `odf/opendocument.py` fait `from defusedxml.sax import make_parser`. Le `.odt` est donc lu par un parseur durci, le `.docx` par lxml. La ligne de `requirements.txt` est techniquement redondante, odfpy tirant la dépendance ; elle est **gardée volontairement**, parce qu'elle rend visible dans le fichier des dépendances que le XML des fichiers de bureau est lu par un parseur durci, et qu'elle protège d'un changement de parseur côté odfpy.
 - Le champ `Document.spacy_doc` subsiste mais n'est pas utilisé : les règles lisent
   `Sentence.analyse`.
 - Le surlignage n'est cliquable qu'à la souris. Le rendre accessible au clavier demande un
