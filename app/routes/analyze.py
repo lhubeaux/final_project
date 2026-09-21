@@ -1,4 +1,4 @@
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, render_template, request, current_app
 
 from collections import Counter
 
@@ -8,7 +8,6 @@ from app.services.rendering import surligner
 from app.services.rules import regles, run
 
 bp = Blueprint("analyze", __name__)
-
 
 def page(document=None, findings=None, texte_surligne=None, resume=None, erreur=None):
     """Rendu unique de la page d'analyse.
@@ -39,6 +38,7 @@ def envoi_trop_volumineux(_echec):
     return page(erreur=f"Envoi trop volumineux : {plafond} Mo maximum."), 413
 
 
+
 @bp.route("/", methods=["GET", "POST"])
 def index():
     document = None
@@ -64,16 +64,6 @@ def index():
             erreur = str(echec)
             texte_brut = ""
 
-        maximum = current_app.config["MAX_TEXT_LENGTH"]
-        if len(texte_brut) > maximum:
-            # `maxlength` n'existe que dans le navigateur : un envoi direct le
-            # contourne. C'est la seule vérification qui tienne.
-            erreur = (
-                f"Texte trop long : {len(texte_brut)} caractères "
-                f"pour {maximum} au maximum."
-            )
-            texte_brut = ""
-
         if texte_brut.strip():
             document = build_document(texte_brut, langue="fr")
             findings = run(document)
@@ -86,10 +76,12 @@ def index():
         elif erreur is None:
             erreur = "Aucun texte à analyser."
 
-    return page(
+    return render_template(
+        "analyze/index.html",
         document=document,
         findings=findings,
         texte_surligne=texte_surligne,
         resume=resume,
         erreur=erreur,
+        extensions=extensions_supportees(),
     )
