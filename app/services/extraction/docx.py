@@ -2,10 +2,9 @@ from typing import BinaryIO
 
 from docx import Document as DocumentDocx
 
-from app.services.extraction.registry import FichierIllisible, enregistrer
+from app.services.extraction.base import FichierIllisible
 
 
-@enregistrer(".docx")
 def extraire_docx(flux: BinaryIO) -> str:
     """Le texte des paragraphes d'un .docx, séparés par une ligne vide.
 

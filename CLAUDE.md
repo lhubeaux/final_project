@@ -87,7 +87,7 @@ Le HTML est échappé segment par segment avant l'insertion de `<mark>`. Ne jama
 | spaCy | Seul `services/linguistics.py` importe spaCy. Les règles lisent `Sentence.analyse`. |
 | Signalement | Toute règle renvoie un `Finding` avec un empan absolu. |
 | Persistance | `Finding` est une dataclass de transport ; `FindingRecord` est le modèle SQLAlchemy. |
-| Extensibilité | Un registre pour les règles, un pour les extracteurs : même motif, deux axes. |
+| Extensibilité | Un registre pour les règles, un pour les extracteurs : même motif, deux axes. Tous deux sont des tables littérales, `REGLES` et `REGISTRE` ; pas d'enregistrement par décorateur. |
 | Langues | Seuils et lexiques par langue ; une langue non couverte ne doit jamais lever de `KeyError`. |
 | Score | Pas de score global sur 100. |
 | Données | Listes linguistiques versionnées dans `data/seeds/lexiques.json`, chargées en base par `flask seed` ; aucune requête réseau à l'exécution. |
@@ -112,14 +112,15 @@ app/
     ├── document.py             dataclasses métier et build_document()
     ├── rendering.py            échappement HTML et surlignage
     ├── extraction/
-    │   ├── registry.py         registre, extraire() et erreurs d'import
+    │   ├── base.py             type Extracteur et erreurs d'import
+    │   ├── registry.py         REGISTRE, extraire(), extensions_supportees()
     │   ├── txt.py              décodage sans encodage déclaré
     │   ├── md.py               décodage txt puis retrait des marques
     │   ├── docx.py             paragraphes via python-docx
     │   └── odt.py              paragraphes et titres via odfpy
     └── rules/
         ├── base.py             Finding et contrat Rule
-        ├── runner.py           registre, regles() et run()
+        ├── runner.py           REGLES, regles() et run()
         ├── seuils.py           seuils numériques par langue
         ├── lexiques.py         lit les listes en base via le repository
         ├── fr.py               règles françaises
@@ -129,7 +130,7 @@ app/
 La documentation détaillée de chaque module est dans
 `docs/guide-des-modules-python.md`.
 
-## État au 21 septembre
+## État au 22 septembre
 
 Phase 2 close le 18 septembre, import de fichiers compris. Phase 3 en cours,
 gel des fonctionnalités vendredi 25 au soir.
@@ -172,6 +173,13 @@ gel des fonctionnalités vendredi 25 au soir.
   suivante, sans cache ni redémarrage. `tests/test_admin.py` : onze cas.
 - Documentation versionnée dans `docs/`, diaporama de soutenance
   (`docs/soutenance.pptx`).
+- Les deux registres sont passés en tables littérales le 22 septembre :
+  `REGLES` dans `rules/runner.py`, `REGISTRE` dans `extraction/registry.py`.
+  Le décorateur `@enregistrer` a disparu des deux, avec l'import à effet de
+  bord qu'il obligeait à garder. Le contrat des extracteurs est sorti dans
+  `extraction/base.py`, comme `rules/base.py` : c'est ce qui évite le cycle
+  `registry` → `docx` → `registry`. Aucun appelant n'a changé, les 39 tests
+  passent à l'identique. `docs/` suit.
 
 ### Limites connues
 
@@ -193,6 +201,9 @@ gel des fonctionnalités vendredi 25 au soir.
   son exclusion des verbes avec *être*. Toujours `flask seed` après
   `flask db upgrade`.
 - `docx.paragraphs` ignore le texte des tableaux.
+- Ajouter l'anglais demandera une ligne dans `REGLES` et l'import de `en.py`
+  dans `runner.py` : c'est le seul endroit du moteur où le couple de langues
+  livrées devient visible.
 
 ## Prochaine priorité
 

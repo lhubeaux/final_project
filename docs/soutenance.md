@@ -132,14 +132,14 @@ Trois fichiers de code, plus deux fichiers de données (`seuils.py`, `lexiques.p
 - **`base.py`** — `Finding`, dataclass gelée, et `Rule`, classe abstraite. Une règle
   concrète redéfinit `id`, `hint`, `severity`, puis implémente `check(document)`.
   Elle ne garde **aucun état sur `self`** : l'instance est partagée par toutes les requêtes.
-- **`runner.py`** — le décorateur `@enregistrer` instancie la classe et la range dans un
-  registre plat ; `run(document)` exécute les règles applicables et trie les signalements
+- **`runner.py`** — `REGLES`, une liste plate d'instances écrite en clair ;
+  `run(document)` exécute les règles applicables et trie les signalements
   par position, parce que le surlignage parcourt le texte de gauche à droite.
 - **`fr.py`** — les règles elles-mêmes.
 
 ### Pourquoi `langues` et pas le nom du fichier ?
 
-Le registre est plat : une fois `fr.py` et `en.py` importés, plus rien ne dit d'où vient
+Le registre est plat : une fois les règles rassemblées dans `REGLES`, plus rien ne dit d'où vient
 une règle. Il faut donc que la règle porte elle-même l'information. Mieux encore, les deux
 règles fondées sur des données ne déclarent pas de liste de langues : elles la déduisent
 de leur donnée. Seule `Passif`, qui dépend de l'analyse grammaticale, déclare

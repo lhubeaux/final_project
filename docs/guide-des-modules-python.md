@@ -262,23 +262,25 @@ check(document: Document) -> list[Finding]
 
 ### `app/services/rules/runner.py`
 
-Le registre `_registre` contient une instance partagée de chaque règle.
+La liste `REGLES` contient une instance partagée de chaque règle, écrite en
+clair, dans l'ordre d'affichage du résumé. Une instance et non une classe : une
+règle ne garde aucun état sur `self`, elle est donc partagée par toutes les
+requêtes.
 
-- `@enregistrer` instancie une classe de règle et l'ajoute au registre au moment
-  de l'import.
 - `regles(langue=None)` renvoie une copie de toutes les règles, ou seulement
   celles applicables à une langue.
 - `run(document, desactivees=frozenset())` exécute les règles applicables, écarte
   les identifiants désactivés, rassemble les findings et les trie par position.
 
-Le tri final est nécessaire au rendu de gauche à droite. Ajouter une règle ne
-modifie donc ni la route ni le runner.
+Le tri final est nécessaire au rendu de gauche à droite. Ajouter une règle, c'est
+une classe dans le module de sa langue et une ligne dans `REGLES` : ni la route
+ni `run()` ne changent.
 
 ### `app/services/rules/__init__.py`
 
-Réexporte `Finding`, `Rule`, `enregistrer`, `regles` et `run`. L'import de `fr`
-et `en` déclenche l'enregistrement des règles. Le module anglais est vide pour
-l'instant, mais son import prépare l'extension.
+Réexporte `Finding`, `Rule`, `REGLES`, `regles` et `run`. Le module `en.py` est
+vide pour l'instant : la ligne qui ajoutera ses règles à `REGLES` sera la seule
+modification de `runner.py`.
 
 ### `app/services/rules/seuils.py`
 
@@ -426,33 +428,42 @@ traduction `Finding` → `FindingRecord`.
 
 ## Extraction de fichiers
 
+### `app/services/extraction/base.py`
+
+Le contrat, et rien d'autre : le type `Extracteur`, c'est-à-dire
+`Callable[[BinaryIO], str]` — un extracteur est une fonction, pas une classe, il
+n'a aucun état à porter — et les trois exceptions.
+
+Toutes filles d'`ExtractionError`, toutes porteuses d'un message écrit pour être
+affiché tel quel : `FormatNonSupporte` quand l'extension n'a pas d'extracteur,
+`FichierIllisible` quand le fichier a la bonne extension mais ne s'ouvre pas.
+
+Ce module n'importe rien du projet. C'est ce qui permet à `registry.py`
+d'importer les extracteurs, et aux extracteurs d'importer leurs exceptions, sans
+cycle d'import. Même rôle que `rules/base.py` pour les règles.
+
+**Un extracteur rend du texte brut.** La normalisation reste le travail de
+`build_document()` : un extracteur qui normaliserait lui-même donnerait un second
+texte de référence, et l'invariant des positions ne tiendrait plus.
+
 ### `app/services/extraction/registry.py`
 
-Le second registre du projet, bâti sur le même motif que celui des règles.
+Le second registre du projet, bâti sur le même motif que celui des règles : une
+table écrite en clair.
 
-- `_registre` associe une extension à une fonction `Extracteur`, c'est-à-dire
-  `Callable[[BinaryIO], str]`. Un extracteur est une fonction, pas une classe :
-  il n'a aucun état à porter.
-- `@enregistrer(".txt")` range la fonction décorée sous une ou plusieurs
-  extensions.
+- `REGISTRE` associe une extension à la fonction qui sait la lire. Le jeu de
+  formats est arrêté par décision (D-2), donc l'énumérer se lit mieux qu'un
+  enregistrement automatique : tout ce que le programme accepte tient dans
+  quatre lignes.
 - `extensions_supportees()` renvoie les extensions triées. Le gabarit s'en sert
   pour l'attribut `accept` et pour la ligne des formats : ajouter un extracteur
   met l'interface à jour sans y toucher.
 - `extraire(nom_fichier, flux)` choisit d'après la seule extension. Le nom vient
   du client : il ne sert qu'à ce choix, jamais à écrire sur le disque.
 
-Trois exceptions, toutes filles d'`ExtractionError` et toutes porteuses d'un
-message écrit pour être affiché tel quel : `FormatNonSupporte` quand l'extension
-n'a pas d'extracteur, `FichierIllisible` quand le fichier a la bonne extension
-mais ne s'ouvre pas.
-
 Le dictionnaire `_REFUS` traite à part `.pdf` et `.doc` (D-2) : ils ne sont pas
 absents du registre par hasard, ils sont refusés pour une raison, et le message
-la donne.
-
-**Un extracteur rend du texte brut.** La normalisation reste le travail de
-`build_document()` : un extracteur qui normaliserait lui-même donnerait un second
-texte de référence, et l'invariant des positions ne tiendrait plus.
+la donne. Le test des refus passe avant la recherche dans `REGISTRE`.
 
 ### `app/services/extraction/txt.py`
 
@@ -496,8 +507,9 @@ des types variés sur un fichier corrompu — et relèvent `FichierIllisible`.
 
 ### `app/services/extraction/__init__.py`
 
-Réexporte l'interface publique et importe les quatre modules de format, ce qui
-déclenche leur enregistrement. Même mécanisme que `rules/__init__.py`.
+Réexporte l'interface publique : les exceptions et le type venus de `base.py`,
+`REGISTRE`, `extensions_supportees()` et `extraire()` venus de `registry.py`.
+Même rôle que `rules/__init__.py`.
 
 ---
 

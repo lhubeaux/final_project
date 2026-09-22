@@ -1,7 +1,6 @@
 import re
 from typing import BinaryIO
 
-from app.services.extraction.registry import enregistrer
 from app.services.extraction.txt import decoder
 
 # Le Markdown n'est pas un format de fichier mais une convention d'écriture :
@@ -16,7 +15,6 @@ _EMPHASE = re.compile(r"(\*{1,3}|_{1,3})(\S.*?\S|\S)\1")
 _CODE = re.compile(r"`+")
 
 
-@enregistrer(".md")
 def extraire_md(flux: BinaryIO) -> str:
     texte = decoder(flux.read())
 

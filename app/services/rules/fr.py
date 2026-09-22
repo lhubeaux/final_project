@@ -2,7 +2,6 @@ import re
 
 from app.services.document import Document
 from app.services.rules.base import Finding, Rule
-from app.services.rules.runner import enregistrer
 from app.services.rules.seuils import seuil
 from app.services.rules.lexiques import (
     connecteurs_lourds,
@@ -10,7 +9,6 @@ from app.services.rules.lexiques import (
 )
 
 
-@enregistrer
 class LongueurPhrase(Rule):
     """Signale les phrases qui dépassent le seuil de mots fixé pour la langue."""
 
@@ -53,7 +51,6 @@ def _motif(expression: str) -> re.Pattern[str]:
     return re.compile(motif, re.IGNORECASE)
 
 
-@enregistrer
 class ConnecteursLourds(Rule):
     """Signale les locutions administratives qui ont un équivalent plus simple."""
 
@@ -89,7 +86,6 @@ class ConnecteursLourds(Rule):
 
 
 
-@enregistrer
 class Passif(Rule):
     """Signale les tournures passives et leur éventuel agent absent."""
 

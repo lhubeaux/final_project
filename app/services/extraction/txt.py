@@ -2,7 +2,7 @@ from typing import BinaryIO
 
 from charset_normalizer import from_bytes
 
-from app.services.extraction.registry import FichierIllisible, enregistrer
+from app.services.extraction.base import FichierIllisible
 
 # Sur un texte court, l'heuristique de charset-normalizer peut élire un
 # encodage asiatique et rendre des idéogrammes. On restreint donc les
@@ -47,6 +47,5 @@ def decoder(donnees: bytes) -> str:
     return str(meilleure)
 
 
-@enregistrer(".txt")
 def extraire_txt(flux: BinaryIO) -> str:
     return decoder(flux.read())

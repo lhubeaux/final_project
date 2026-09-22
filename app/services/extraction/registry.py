@@ -1,30 +1,25 @@
-"""Registre des extracteurs de texte (D-8).
+"""Registre des extracteurs : quelle extension confie son flux à quelle fonction.
 
-Un extracteur reçoit un flux binaire et renvoie du texte BRUT. La
-normalisation reste le travail de `build_document()`, seul point d'entrée du
-moteur : un extracteur qui normaliserait lui-même casserait l'invariant, car
-deux chemins d'entrée produiraient deux textes de référence différents.
+La table est écrite en clair. Le jeu de formats est arrêté (D-2), donc
+l'énumérer se lit mieux qu'un enregistrement automatique : tout ce que le
+programme accepte tient dans les quelques lignes de `REGISTRE`.
 """
 
 from pathlib import Path
-from typing import BinaryIO, Callable
+from typing import BinaryIO
 
+from app.services.extraction.base import Extracteur, FormatNonSupporte
+from app.services.extraction.docx import extraire_docx
+from app.services.extraction.md import extraire_md
+from app.services.extraction.odt import extraire_odt
+from app.services.extraction.txt import extraire_txt
 
-class ExtractionError(Exception):
-    """Erreur d'import dont le message est montrable à l'utilisateur."""
-
-
-class FormatNonSupporte(ExtractionError):
-    """L'extension n'a pas d'extracteur enregistré."""
-
-
-class FichierIllisible(ExtractionError):
-    """Le fichier a la bonne extension mais ne s'ouvre pas."""
-
-
-Extracteur = Callable[[BinaryIO], str]
-
-_registre: dict[str, Extracteur] = {}
+REGISTRE: dict[str, Extracteur] = {
+    ".txt": extraire_txt,
+    ".md": extraire_md,
+    ".docx": extraire_docx,
+    ".odt": extraire_odt,
+}
 
 # Refusés volontairement (D-2) : mise en page figée pour .pdf, format binaire
 # propriétaire pour .doc. Un message dédié vaut mieux qu'un « format inconnu ».
@@ -34,20 +29,9 @@ _REFUS = {
 }
 
 
-def enregistrer(*extensions: str) -> Callable[[Extracteur], Extracteur]:
-    """Décorateur : range la fonction dans le registre pour ces extensions."""
-
-    def decorateur(fonction: Extracteur) -> Extracteur:
-        for extension in extensions:
-            _registre[extension.lower()] = fonction
-        return fonction
-
-    return decorateur
-
-
 def extensions_supportees() -> tuple[str, ...]:
     """Les extensions acceptées, pour le formulaire et les messages d'erreur."""
-    return tuple(sorted(_registre))
+    return tuple(sorted(REGISTRE))
 
 
 def extraire(nom_fichier: str, flux: BinaryIO) -> str:
@@ -61,7 +45,7 @@ def extraire(nom_fichier: str, flux: BinaryIO) -> str:
     if extension in _REFUS:
         raise FormatNonSupporte(_REFUS[extension])
 
-    extracteur = _registre.get(extension)
+    extracteur = REGISTRE.get(extension)
     if extracteur is None:
         raise FormatNonSupporte(
             f"Format « {extension or 'sans extension'} » non pris en charge. "

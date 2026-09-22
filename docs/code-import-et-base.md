@@ -15,8 +15,8 @@ Ici, on ouvre les fichiers. Chaque section cite le code tel qu'il est dans le d�
 ## Sommaire
 
 **Partie 1 — L'import de fichiers**
-1. [Le registre : `extraction/registry.py`](#1-le-registre--extractionregistrypy)
-2. [L'enregistrement : `extraction/__init__.py`](#2-lenregistrement--extraction__init__py)
+1. [Le contrat : `extraction/base.py`](#1-le-contrat--extractionbasepy)
+2. [Le registre : `extraction/registry.py`](#2-le-registre--extractionregistrypy)
 3. [Le `.txt` : deviner un encodage](#3-le-txt--deviner-un-encodage)
 4. [Le `.md` : six expressions régulières](#4-le-md--six-expressions-régulières)
 5. [Le `.docx`](#5-le-docx)
@@ -57,7 +57,9 @@ zone de texte ──────────────────────
 fichier ──► extraire(nom, flux) ─► texte brut┘
 ```
 
-## 1. Le registre : `extraction/registry.py`
+## 1. Le contrat : `extraction/base.py`
+
+Ce module ne contient que ce qu'un extracteur doit connaître : son type, et les erreurs qu'il peut lever. Il n'importe rien du projet, et c'est voulu — voir la fin de la section 2.
 
 ### Les exceptions
 
@@ -67,7 +69,7 @@ class ExtractionError(Exception):
 
 
 class FormatNonSupporte(ExtractionError):
-    """L'extension n'a pas d'extracteur enregistré."""
+    """L'extension n'a pas d'extracteur dans le registre."""
 
 
 class FichierIllisible(ExtractionError):
@@ -92,10 +94,19 @@ Un **alias de type**. `Callable[[BinaryIO], str]` se lit : « une fonction qui p
 
 `BinaryIO` désigne tout objet qui se lit comme un fichier ouvert en mode binaire : un vrai fichier, un `io.BytesIO` en test, ou le flux d'un fichier téléversé dans Flask.
 
-### Le registre et les refus
+Un extracteur est donc une **fonction**, pas une classe. Contrairement à une règle, il n'a ni identifiant, ni sévérité, ni état à porter : il n'y a rien à mettre dans un objet.
+
+## 2. Le registre : `extraction/registry.py`
+
+### La table et les refus
 
 ```python
-_registre: dict[str, Extracteur] = {}
+REGISTRE: dict[str, Extracteur] = {
+    ".txt": extraire_txt,
+    ".md": extraire_md,
+    ".docx": extraire_docx,
+    ".odt": extraire_odt,
+}
 
 _REFUS = {
     ".pdf": "Le PDF n'est pas accepté : le texte y est disposé, pas structuré.",
@@ -103,57 +114,27 @@ _REFUS = {
 }
 ```
 
-`_registre` associe une extension (`".txt"`) à la fonction qui sait la lire. Il commence vide et se remplit à l'import des modules de format (section 2).
+`REGISTRE` associe une extension (`".txt"`) à la fonction qui sait la lire. La table est écrite en clair, d'un seul tenant.
 
-Le **tiret bas initial** est une convention Python : « privé au module, ne pas utiliser de l'extérieur ». Rien ne l'interdit techniquement ; c'est un signal au lecteur. Les autres modules passent par `extraire()` et `extensions_supportees()`, jamais par `_registre` directement.
+**Pourquoi pas un décorateur ?** Une version antérieure enregistrait chaque extracteur avec un `@enregistrer(".txt")` posé sur sa fonction, et le registre commençait vide. Le mécanisme est élégant, et il reste courant dans les bibliothèques, mais il coûte deux choses ici :
 
-`_REFUS` traite à part les deux formats refusés par décision de conception (D-2). Ils ne sont pas simplement absents du registre : ils ont un message qui donne la raison, ce qui vaut mieux qu'un « format inconnu ».
+- **Il faut importer un module pour qu'il existe.** Un extracteur jamais importé ne s'enregistre pas, sans erreur ni message : la liste des formats rétrécit en silence. Il fallait donc une ligne d'import à effet de bord, que n'importe quel outil de nettoyage aurait supprimée comme inutile.
+- **Rien ne se lit d'un seul endroit.** Pour savoir ce que le programme accepte, il fallait ouvrir les quatre modules et y chercher un décorateur.
 
-### Le décorateur `enregistrer`
+Le jeu de formats est **arrêté par décision de conception** (D-2) : `.txt`, `.md`, `.docx`, `.odt`, et deux refus explicites. Il n'y a donc pas d'extension à découvrir à l'exécution, et le dictionnaire littéral dit tout ce que le décorateur faisait, en se lisant d'un coup d'œil. Le registre des règles (`REGLES` dans `rules/runner.py`) suit exactement le même raisonnement.
 
-```python
-def enregistrer(*extensions: str) -> Callable[[Extracteur], Extracteur]:
-    """Décorateur : range la fonction dans le registre pour ces extensions."""
-
-    def decorateur(fonction: Extracteur) -> Extracteur:
-        for extension in extensions:
-            _registre[extension.lower()] = fonction
-        return fonction
-
-    return decorateur
-```
-
-C'est la pièce la plus technique de l'import. `enregistrer` est une **fabrique de décorateurs** : une fonction qui *renvoie* un décorateur. Il faut ce niveau supplémentaire parce que le décorateur prend un argument, l'extension.
-
-Voici ce que Python fait quand il lit, dans `txt.py` :
-
-```python
-@enregistrer(".txt")
-def extraire_txt(flux): ...
-```
-
-1. Il définit la fonction `extraire_txt`.
-2. Il appelle `enregistrer(".txt")`. Cet appel ne range rien encore : il fabrique et renvoie la fonction interne `decorateur`.
-3. Il appelle `decorateur(extraire_txt)`. C'est là que la fonction est rangée dans `_registre[".txt"]`.
-4. `decorateur` renvoie `extraire_txt` **inchangée**, et c'est elle qui reste liée au nom `extraire_txt`.
-
-Deux notions se croisent ici :
-
-- `*extensions` recueille un nombre quelconque d'arguments dans un tuple. `@enregistrer(".htm", ".html")` rangerait la même fonction sous deux extensions.
-- `decorateur` utilise `extensions`, qui appartient à la fonction englobante : c'est une **fermeture** (*closure*). La fonction interne garde accès à cette variable même après la fin de l'appel à `enregistrer`.
-
-`.lower()` normalise la clé : `".TXT"` et `".txt"` désignent le même format.
-
-Le motif est exactement celui du registre des règles (`@enregistrer` dans `rules/runner.py`), à une différence près : pour les règles, le décorateur *instancie* une classe ; ici, il range une fonction telle quelle. Un extracteur n'a pas d'état ni d'attributs à porter — une fonction suffit.
+`_REFUS` traite à part les deux formats refusés (D-2). Ils ne sont pas simplement absents du registre : ils ont un message qui donne la raison, ce qui vaut mieux qu'un « format inconnu ». Le **tiret bas initial** est une convention Python : « privé au module ». Rien ne l'interdit techniquement ; c'est un signal au lecteur.
 
 ### `extensions_supportees()`
 
 ```python
 def extensions_supportees() -> tuple[str, ...]:
-    return tuple(sorted(_registre))
+    return tuple(sorted(REGISTRE))
 ```
 
 `sorted()` appliqué à un dictionnaire trie ses **clés**. Le résultat est converti en tuple, immuable : un appelant ne peut pas modifier la liste des formats par accident. `tuple[str, ...]` signifie « un tuple de chaînes, de longueur quelconque ». Aujourd'hui : `('.docx', '.md', '.odt', '.txt')`.
+
+Le gabarit s'en sert pour l'attribut `accept` du formulaire et pour la ligne des formats acceptés : ajouter un extracteur met l'interface à jour sans y toucher.
 
 ### `extraire()`
 
@@ -164,7 +145,7 @@ def extraire(nom_fichier: str, flux: BinaryIO) -> str:
     if extension in _REFUS:
         raise FormatNonSupporte(_REFUS[extension])
 
-    extracteur = _registre.get(extension)
+    extracteur = REGISTRE.get(extension)
     if extracteur is None:
         raise FormatNonSupporte(
             f"Format « {extension or 'sans extension'} » non pris en charge. "
@@ -174,39 +155,60 @@ def extraire(nom_fichier: str, flux: BinaryIO) -> str:
     return extracteur(flux)
 ```
 
-- `Path(nom_fichier).suffix` extrait l'extension avec son point : `"note.TXT"` donne `".TXT"`, puis `.lower()` donne `".txt"`. Un nom sans point donne `""`.
+Appelée depuis la route sous la forme `extraire(fichier.filename, fichier.stream)`.
+
+- `Path(nom_fichier).suffix` extrait l'extension avec son point : `"note.TXT"` donne `".TXT"`, puis `.lower()` donne `".txt"`. Un nom sans point donne `""`. C'est cette mise en minuscules qui fait que `.TXT` et `.txt` désignent le même format — dans la version à décorateur, le même `.lower()` était appliqué à la clé au moment de l'enregistrement.
 - L'ordre des tests compte : les refus documentés passent **avant** la recherche dans le registre, pour que `.pdf` reçoive son message dédié.
-- `_registre.get(extension)` renvoie `None` si la clé est absente, là où `_registre[extension]` lèverait une `KeyError`.
+- `REGISTRE.get(extension)` renvoie `None` si la clé est absente, là où `REGISTRE[extension]` lèverait une `KeyError`.
 - `extension or 'sans extension'` : si l'extension est la chaîne vide (fausse en Python), l'expression vaut `'sans extension'`.
 - Les deux f-strings côte à côte sont concaténées par Python avant l'exécution : c'est une seule chaîne écrite sur deux lignes.
 - Dernière ligne : `extracteur` est une variable qui contient une fonction ; `extracteur(flux)` l'appelle.
 
 Le nom du fichier vient du navigateur, donc de l'utilisateur. Il sert **uniquement** à choisir l'extracteur ; il n'est jamais utilisé pour écrire sur le disque, ce qui écarte les attaques par nom de fichier (`../../app/config.py`).
 
-## 2. L'enregistrement : `extraction/__init__.py`
+### La façade : `extraction/__init__.py`
 
 ```python
-from app.services.extraction.registry import (
+from app.services.extraction.base import (
     Extracteur,
     ExtractionError,
     FichierIllisible,
     FormatNonSupporte,
-    enregistrer,
+)
+from app.services.extraction.registry import (
+    REGISTRE,
     extensions_supportees,
     extraire,
 )
-from app.services.extraction import docx, md, odt, txt    # noqa: F401 — enregistrement
 
 __all__ = [ ... ]
 ```
 
-Ce fichier fait deux choses.
+Ce fichier ne fait plus qu'une chose : **réexporter l'interface publique**. La route écrit `from app.services.extraction import extraire` au lieu d'aller chercher dans `registry`. Le paquet présente une façade ; son organisation interne peut changer sans toucher aux appelants. `__all__` liste ce qui est public.
 
-**Il réexporte l'interface publique.** La route écrit `from app.services.extraction import extraire` au lieu d'aller chercher dans `registry`. Le paquet présente une façade ; son organisation interne peut changer sans toucher aux appelants. `__all__` liste ce qui est public.
+Dans la version à décorateur, ce fichier portait en plus la ligne `from app.services.extraction import docx, md, odt, txt`, suivie d'un `# noqa: F401` : un import dont on ne voulait que l'effet de bord. Elle n'a plus de raison d'être.
 
-**Il importe les quatre modules de format, pour leur effet de bord.** Importer `txt.py` exécute son code, donc son décorateur `@enregistrer(".txt")`, donc l'enregistrement. Sans cette ligne, le registre resterait vide. Les noms `docx`, `md`, `odt`, `txt` ne sont jamais utilisés ensuite : un linter signalerait un import inutile, d'où le commentaire `# noqa: F401` qui lui dit que c'est voulu.
+### Pourquoi `base.py` existe
 
-Un détail du mécanisme d'import de Python rend le système robuste : importer `app.services.extraction.registry` exécute **d'abord** `app/services/extraction/__init__.py`, parce que Python importe toujours un paquet avant ses modules. Quel que soit le chemin d'import, les quatre extracteurs sont donc enregistrés.
+C'est la seule contrainte technique du montage, et elle mérite d'être comprise.
+
+`registry.py` importe les quatre extracteurs, pour construire sa table. Les extracteurs, eux, ont besoin de `FichierIllisible` pour signaler un fichier corrompu. Si cette exception vivait dans `registry.py`, on aurait :
+
+```text
+registry.py ──importe──► docx.py ──importe──► registry.py
+```
+
+Un **cycle d'import** : Python commencerait à exécuter `registry.py`, sauterait dans `docx.py`, qui redemanderait `registry.py` alors qu'il n'a pas fini de s'exécuter. Selon l'ordre des lignes, cela marche par accident ou casse avec une `ImportError` difficile à lire.
+
+Sortir le contrat dans un module qui n'importe rien supprime le cycle. Les dépendances vont toutes dans le même sens :
+
+```text
+base.py ◄────── docx.py, md.py, odt.py, txt.py ◄────── registry.py
+   ▲                                                       │
+   └───────────────────────────────────────────────────────┘
+```
+
+C'est le même découpage que pour les règles : `rules/base.py` porte le contrat (`Finding`, `Rule`), `rules/runner.py` porte la table et l'exécution.
 
 ## 3. Le `.txt` : deviner un encodage
 
@@ -238,7 +240,6 @@ def decoder(donnees: bytes) -> str:
     return str(meilleure)
 
 
-@enregistrer(".txt")
 def extraire_txt(flux: BinaryIO) -> str:
     return decoder(flux.read())
 ```
@@ -272,7 +273,6 @@ _EMPHASE = re.compile(r"(\*{1,3}|_{1,3})(\S.*?\S|\S)\1")
 _CODE = re.compile(r"`+")
 
 
-@enregistrer(".md")
 def extraire_md(flux: BinaryIO) -> str:
     texte = decoder(flux.read())
 
@@ -314,7 +314,6 @@ Le nettoyage est volontairement minimal, et sans dépendance nouvelle. Une limit
 from docx import Document as DocumentDocx
 
 
-@enregistrer(".docx")
 def extraire_docx(flux: BinaryIO) -> str:
     try:
         docx = DocumentDocx(flux)
@@ -353,7 +352,6 @@ def _parcourir(noeud: Element) -> Iterator[str]:
             yield from _parcourir(enfant)
 
 
-@enregistrer(".odt")
 def extraire_odt(flux: BinaryIO) -> str:
     try:
         odt = load(flux)

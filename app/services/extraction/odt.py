@@ -5,7 +5,7 @@ from odf.element import Element
 from odf.namespaces import TEXTNS
 from odf.opendocument import load
 
-from app.services.extraction.registry import FichierIllisible, enregistrer
+from app.services.extraction.base import FichierIllisible
 
 # Les qnames sont construits à la main : instancier `H()` exigerait son
 # attribut obligatoire `outlinelevel`, inutile ici puisqu'on ne fait que
@@ -28,7 +28,6 @@ def _parcourir(noeud: Element) -> Iterator[str]:
             yield from _parcourir(enfant)
 
 
-@enregistrer(".odt")
 def extraire_odt(flux: BinaryIO) -> str:
     """Le texte des paragraphes et titres d'un .odt, dans l'ordre de lecture.
 

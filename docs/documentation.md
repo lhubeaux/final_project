@@ -70,14 +70,15 @@ app/
     ├── rendering.py       surligner() — échappement puis balisage
     ├── linguistics.py     point de contact unique avec spaCy, TokenLinguistique
     ├── extraction/
-    │   ├── registry.py    registre, extraire(), erreurs d'import
+    │   ├── base.py        Extracteur (type) + erreurs d'import
+    │   ├── registry.py    REGISTRE, extraire(), extensions_supportees()
     │   ├── txt.py         décodage d'octets sans encodage déclaré
     │   ├── md.py          décodage txt puis retrait des marques
     │   ├── docx.py        paragraphes (python-docx)
     │   └── odt.py         paragraphes et titres dans l'ordre (odfpy)
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (classe abstraite)
-        ├── runner.py      registre plat, enregistrer / regles / run
+        ├── runner.py      REGLES : liste plate, regles / run
         ├── seuils.py      données : seuils numériques par langue
         ├── lexiques.py    lit en base connecteurs et verbes conjugués avec être
         ├── fr.py          LongueurPhrase · ConnecteursLourds · Passif
@@ -201,18 +202,27 @@ balises imbriquées.
 ### Le registre (D-8)
 
 ```python
-@enregistrer
-class MaRegle(Rule):
-    ...
+REGLES: list[Rule] = [
+    LongueurPhrase(),
+    ConnecteursLourds(),
+    Passif(),
+]
 ```
 
-Le décorateur instancie la classe et la range dans une liste de module. `run(document)`
-parcourt cette liste, écarte les règles inapplicables, concatène les signalements et les
-trie par position — parce que le surlignage parcourt le texte de gauche à droite.
+Une liste plate de module, écrite en clair dans l'ordre d'affichage du résumé. Des
+instances et non des classes : une règle ne garde aucun état sur `self`, elle est donc
+partagée par toutes les requêtes. `run(document)` parcourt cette liste, écarte les règles
+inapplicables, concatène les signalements et les trie par position — parce que le
+surlignage parcourt le texte de gauche à droite.
+
+Le registre a d'abord été rempli par un décorateur `@enregistrer` posé sur chaque classe.
+La table littérale a été préférée : le jeu de règles est petit et connu, et elle montre
+d'un coup d'œil tout ce que le moteur exécute, sans dépendre d'un import à effet de bord.
+Le registre des extracteurs (`REGISTRE`) suit le même raisonnement.
 
 Conséquence : **ajouter une règle ne modifie aucun appelant.** Ni la route, ni le
-template, ni le runner. La seule trace d'une règle ailleurs dans l'application est sa
-ligne de couleur dans `style.css`.
+template, ni `run()` — seulement une ligne dans `REGLES`. La seule trace d'une règle
+ailleurs dans l'application est sa ligne de couleur dans `style.css`.
 
 ### Les langues, et l'extension aux 24 langues de l'UE
 
@@ -311,7 +321,7 @@ par `{% extends %}`. Le lien de la page courante reçoit la classe `actif` d'apr
 
 - **Le formulaire** — une `textarea`, `maxlength="20000"`, et un champ de dépôt de
   fichier. L'attribut `accept` et la liste des formats affichée sont tous deux produits
-  par `extensions_supportees()` : enregistrer un extracteur de plus suffit à les mettre
+  par `extensions_supportees()` : ajouter un extracteur suffit à les mettre
   à jour. Après analyse, la zone réaffiche `document.texte`, c'est-à-dire le texte
   **normalisé** : l'utilisateur récupère ses apostrophes redressées. C'est cohérent
   avec D-4 et assumé.
