@@ -1,6 +1,6 @@
 import re
 
-from app.services.document import Document
+from app.services.ingestion.document import Document
 from app.services.rules.base import Finding, Rule
 from app.services.rules.seuils import seuil
 from app.services.rules.lexiques import (
@@ -35,6 +35,7 @@ class LongueurPhrase(Rule):
                 ))
 
         return findings
+
 
 def _motif(expression: str) -> re.Pattern[str]:
     """Transforme une expression du lexique en expression régulière.
@@ -85,7 +86,6 @@ class ConnecteursLourds(Rule):
         return findings
 
 
-
 class Passif(Rule):
     """Signale les tournures passives et leur éventuel agent absent."""
 
@@ -115,9 +115,7 @@ class Passif(Rule):
                     continue
 
                 if participe.lemme in verbes_etre:
-
                     continue
-
 
                 auxiliaires = [
                     token
@@ -125,7 +123,8 @@ class Passif(Rule):
                     if token.gouverneur == auxiliaire.gouverneur
                     and token.categorie == "AUX"
                 ]
-                debut = min(token.start for token in auxiliaires)
+                # `default` : un auxiliaire mal étiqueté ne doit pas faire planter l'analyse.
+                debut = min((token.start for token in auxiliaires), default=auxiliaire.start)
 
                 a_un_agent = any(
                     token.gouverneur == auxiliaire.gouverneur

@@ -3,7 +3,7 @@
 *Pour l'explication ligne par ligne du code de l'import et du lien à la base, voir
 `code-import-et-base.md`.*
 
-État au 21 septembre 2026. Ce document décrit le code réellement présent dans
+État au 23 septembre 2026. Ce document décrit le code réellement présent dans
 `app/`, sans couvrir les tests. Il distingue les modules actifs des emplacements
 préparés pour les phases suivantes.
 
@@ -13,7 +13,7 @@ préparés pour les phases suivantes.
 requête HTTP POST /
   -> routes/analyze.py : index()
   -> services/extraction/registry.py : extraire(nom, flux)   (si un fichier est déposé)
-  -> services/document.py : build_document(texte_brut, langue="fr")
+  -> services/ingestion/document.py : build_document(texte_brut, langue="fr")
        -> normalize()
        -> segment()
        -> tokenize()
@@ -32,7 +32,8 @@ document.texte[start:end] == fragment.texte
 
 La base intervient à un seul endroit de cette chaîne : pendant `run(document)`,
 les règles lisent leurs listes de mots via `lexiques.py`, qui passe par le
-repository. Une analyse affichée n'est pas encore enregistrée en base.
+repository. Une analyse affichée n'est enregistrée que si l'utilisateur le demande,
+sous un nom, par un second formulaire (`POST /analyses/`).
 
 ---
 
@@ -40,11 +41,11 @@ repository. Une analyse affichée n'est pas encore enregistrée en base.
 
 | Objet | Fichier | Rôle |
 |---|---|---|
-| `Token` | `services/document.py` | Token grossier pour compter les mots ; porte un texte et un empan absolu. |
-| `TokenLinguistique` | `services/linguistics.py` | Projection d'un token spaCy : lemme, catégorie grammaticale, dépendance, gouverneur et empan absolu. |
-| `Sentence` | `services/document.py` | Phrase segmentée, avec ses `tokens` et son `analyse` linguistique. |
-| `Paragraph` | `services/document.py` | Paragraphe et liste de ses phrases. |
-| `Document` | `services/document.py` | Objet métier remis aux règles ; expose aussi les propriétés aplaties `phrases` et `tokens`. |
+| `Token` | `services/ingestion/document.py` | Token grossier pour compter les mots ; porte un texte et un empan absolu. |
+| `TokenLinguistique` | `services/ingestion/linguistics.py` | Projection d'un token spaCy : lemme, catégorie grammaticale, dépendance, gouverneur et empan absolu. |
+| `Sentence` | `services/ingestion/document.py` | Phrase segmentée, avec ses `tokens` et son `analyse` linguistique. |
+| `Paragraph` | `services/ingestion/document.py` | Paragraphe et liste de ses phrases. |
+| `Document` | `services/ingestion/document.py` | Objet métier remis aux règles ; expose aussi les propriétés aplaties `phrases` et `tokens`. |
 | `Finding` | `services/rules/base.py` | Signalement de transport : règle, principe, sévérité, empan, message et suggestion éventuelle. |
 | `DocumentRecord`, `Analysis`, `FindingRecord` | `models/` | Objets persistés par SQLAlchemy ; ils sont distincts des objets métier et de `Finding`. |
 
@@ -64,7 +65,7 @@ Ce module contient la fabrique `create_app(config_class=Config)`.
 - Charge la classe de configuration reçue.
 - Initialise SQLAlchemy avec `db.init_app(app)` et les migrations avec
   `migrate.init_app(app, db)`.
-- Enregistre le blueprint d'analyse.
+- Enregistre les blueprints `analyze` et `admin`, et la commande `flask seed`.
 - Déclare `GET /health`, qui renvoie `{"status": "ok"}`.
 
 La fabrique permet d'utiliser `TestConfig` pendant les tests sans modifier la
@@ -107,26 +108,45 @@ lu ici, et seulement transmis au repository.
 
 ### `app/routes/analyze.py`
 
-Le blueprint `bp` porte la route `index()` sur `GET /` et `POST /`.
+Le blueprint `bp` porte quatre routes et deux fonctions d'appui.
+
+**`index()`**, sur `GET /` et `POST /`, analyse et affiche ; elle n'enregistre rien.
 
 - En `GET`, elle affiche simplement le formulaire.
 - En `POST`, elle prend le texte à la source la plus explicite : un fichier
   déposé s'il y en a un, sinon `request.form["texte"]`. Un fichier passe par
   `extraire(fichier.filename, fichier.stream)`.
-- Une `ExtractionError` est attrapée là, et son message est affiché tel quel :
-  il a été écrit pour l'utilisateur, la route ne le reformule pas.
-- Un texte vide — saisie blanche, ou fichier dont l'extraction ne rend rien —
-  n'est pas analysé : la route rend « Aucun texte à analyser. »
-- Sinon elle appelle `build_document(texte_brut, langue="fr")`, exécute
-  `run(document)`, puis `surligner(document.texte, findings)`.
-- `Counter` calcule le nombre de signalements par règle, y compris zéro. La liste
-  est fondée sur `regles(document.langue)`, pas seulement sur les règles qui ont
-  trouvé quelque chose.
-- Elle rend la page par `page(...)`, la fonction de rendu unique du module :
-  elle passe `document`, `findings`, `texte_surligne`, `resume` et `erreur`,
-  et `page()` ajoute toujours `extensions`.
+- Chaque refus sort aussitôt par `return page(erreur=...)` : une `ExtractionError`,
+  dont le message est affiché tel quel, un texte plus long que `MAX_TEXT_LENGTH`,
+  ou un texte vide — « Aucun texte à analyser. »
+- Sinon elle appelle `build_document(texte_brut, langue="fr")` et rend
+  `page(document=document, findings=run(document), nom_fichier=...)`.
 
-`page()` existe parce que la route n'est pas le seul chemin vers cet écran.
+**`enregistrer()`**, sur `POST /analyses/`, enregistre sous un nom le texte qui vient
+d'être analysé. Le formulaire renvoie le texte normalisé dans un champ caché, jamais
+les signalements : la route relance `build_document()` et `run()`, pour ne pas se fier
+à des empans venus du navigateur. Le nom est nettoyé (`" ".join(nom.split())`) et
+limité à `NOM_MAX` caractères ; un nom vide réaffiche l'analyse avec un bandeau, un
+champ caché vide ou trop long répond 400. Puis `repositories.enregistrer_analyse()`,
+un `flash()` et une redirection vers `/analyses/<id>` : POST-Redirect-GET.
+
+**`relire(analysis_id)`**, sur `GET /analyses/<id>`, reconstruit le `Document` depuis le
+texte enregistré et rend la page avec les `FindingRecord`, sans relancer les règles.
+Un `FindingRecord` porte les mêmes attributs qu'un `Finding` (D-6) : `surligner()` et
+le gabarit le lisent tel quel. Identifiant inconnu : 404.
+
+**`analyses()`**, sur `GET /analyses/`, rend la liste des analyses enregistrées.
+
+**`resumer(findings, langue)`** compte les signalements par règle avec `Counter`, zéros
+compris : la liste part de `regles(langue)`, pas des seules règles qui ont trouvé
+quelque chose.
+
+**`page(...)`** est le rendu unique de l'écran d'analyse. Elle calcule elle-même
+`surligner(document.texte, findings)` et `resumer(...)` quand un document est fourni,
+et ajoute toujours `extensions` et `nom_max`. Le paramètre `analyse` distingue une
+analyse relue, qui affiche son nom, d'une analyse fraîche, qui propose de l'enregistrer.
+
+`page()` existe aussi parce que les routes ne sont pas le seul chemin vers cet écran.
 `envoi_trop_volumineux()`, décoré par `@bp.app_errorhandler(413)`, y passe aussi :
 Flask refuse une requête trop lourde pendant la lecture de son corps, avant de la
 router, donc `index()` n'est jamais appelée et aucun `try` ne pourrait l'attraper.
@@ -173,7 +193,12 @@ Fichier vide, qui fait de `routes` un paquet.
 
 ## Construire le document analysable
 
-### `app/services/normalization.py`
+Les cinq modules de cette partie vivent dans `app/services/ingestion/` : ensemble,
+ils font d'un texte brut un `Document`. `__init__.py` est vide et ne réexporte
+rien ; on importe chaque module par son chemin complet, par exemple
+`from app.services.ingestion.document import build_document`.
+
+### `app/services/ingestion/normalization.py`
 
 `normalize(texte: str) -> str` applique une seule fois les six transformations :
 
@@ -187,7 +212,7 @@ Fichier vide, qui fait de `routes` un paquet.
 Cette étape peut changer la longueur de la chaîne. C'est pourquoi les empans ne
 sont calculés qu'après elle.
 
-### `app/services/segmentation.py`
+### `app/services/ingestion/segmentation.py`
 
 `segment(texte: str) -> list[list[dict]]` sépare d'abord les paragraphes avec
 une expression régulière, puis utilise une unique instance de `pysbd.Segmenter`
@@ -198,14 +223,14 @@ Chaque dictionnaire de phrase porte aussi ces trois valeurs. Les positions de
 pysbd, relatives au paragraphe, sont converties en positions absolues avec
 `bloc.start() + span.start`.
 
-### `app/services/tokenization.py`
+### `app/services/ingestion/tokenization.py`
 
 `tokenize(phrase: str, offset: int = 0) -> list[dict]` utilise `re.finditer(r"\S+", phrase)`.
 Il s'agit volontairement d'une tokenisation grossière : la ponctuation peut
 rester attachée à un mot. `offset` reporte les positions de la phrase vers le
 texte complet.
 
-### `app/services/linguistics.py`
+### `app/services/ingestion/linguistics.py`
 
 Ce module est l'unique import de spaCy dans l'application.
 
@@ -220,7 +245,7 @@ Ce module est l'unique import de spaCy dans l'application.
 Le `gouverneur` est l'indice du token gouverneur dans l'analyse de la phrase ;
 les positions, elles, sont absolues grâce à `offset + token.idx`.
 
-### `app/services/document.py`
+### `app/services/ingestion/document.py`
 
 Ce fichier rassemble les objets métier `Token`, `Sentence`, `Paragraph` et
 `Document`, puis fournit l'unique point d'entrée :
@@ -279,8 +304,8 @@ ni `run()` ne changent.
 ### `app/services/rules/__init__.py`
 
 Réexporte `Finding`, `Rule`, `REGLES`, `regles` et `run`. Le module `en.py` est
-vide pour l'instant : la ligne qui ajoutera ses règles à `REGLES` sera la seule
-modification de `runner.py`.
+vide pour l'instant : l'import de ses classes et leurs lignes dans `REGLES` seront
+les seules modifications de `runner.py`.
 
 ### `app/services/rules/seuils.py`
 
@@ -349,7 +374,7 @@ attributs `data-findings` pour relier le surlignage aux fiches de détails.
 
 ---
 
-## Persistance : listes de mots en service, analyses pas encore enregistrées
+## Persistance : listes de mots et analyses enregistrées
 
 ### `app/models/base.py`
 
@@ -366,8 +391,11 @@ ses analyses enfants si le document est supprimé.
 
 ### `app/models/analysis.py`
 
-`Analysis` représente une exécution datée du moteur. Elle appartient à un
-`DocumentRecord` et possède une collection de `FindingRecord`.
+`Analysis` représente une analyse que l'utilisateur a choisi d'enregistrer. Elle
+porte un `nom` obligatoire et une date `cree_le` en UTC, appartient à un
+`DocumentRecord` et possède une collection de `FindingRecord`. La relation
+`findings` déclare `order_by="FindingRecord.id"` : relus, les signalements
+reviennent dans l'ordre de `run()`, celui des rangs de `data-findings`.
 
 ### `app/models/finding.py`
 
@@ -420,9 +448,20 @@ Quatre fonctions servent l'écran d'édition :
   `None`. Les deux valeurs sont lues avant `commit()` : après validation, l'objet
   supprimé ne peut plus être relu.
 
-L'enregistrement des analyses viendra ici, sous la forme de
-`enregistrer_analyse(...)` : c'est là, et nulle part ailleurs, que se fera la
-traduction `Finding` → `FindingRecord`.
+Trois fonctions servent les analyses enregistrées :
+
+- `enregistrer_analyse(nom, document, findings, nom_fichier=None)` — crée le
+  `DocumentRecord`, l'`Analysis` et ses `FindingRecord` en une transaction, et
+  renvoie l'id. C'est la seule traduction `Finding` → `FindingRecord` du projet :
+  `FindingRecord(**asdict(finding))`, possible parce que les deux types ont les
+  mêmes champs. La `source` se déduit de `nom_fichier`. Le HTML n'est jamais
+  stocké.
+- `lire_analyse(analysis_id)` — une analyse ou `None`.
+- `toutes_les_analyses()` — la plus récente d'abord.
+
+`Document` et `Finding` ne sont importés que sous `if TYPE_CHECKING:`, pour les
+annotations : un import réel créerait le cycle `rules` → `lexiques` →
+`repositories` → `rules`.
 
 ---
 

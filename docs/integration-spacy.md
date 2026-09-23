@@ -9,7 +9,7 @@
 
 ## 1. Un seul fichier importe spaCy
 
-`app/services/linguistics.py` (D-7). Deux rôles : charger le modèle, traduire sa sortie.
+`app/services/ingestion/linguistics.py` (D-7). Deux rôles : charger le modèle, traduire sa sortie.
 
 **Charger une seule fois** — environ 2 s mesurées. Au premier besoin, puis en cache :
 

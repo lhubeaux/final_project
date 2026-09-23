@@ -6,7 +6,7 @@ que le moteur exécute se lit d'un seul coup d'œil, sans avoir à ouvrir chaque
 module pour y chercher un décorateur.
 """
 
-from app.services.document import Document
+from app.services.ingestion.document import Document
 from app.services.rules.base import Finding, Rule
 from app.services.rules.fr import ConnecteursLourds, LongueurPhrase, Passif
 
@@ -34,11 +34,8 @@ def run(document: Document, desactivees: frozenset[str] = frozenset()) -> list[F
     """
     findings: list[Finding] = []
 
-    for regle in REGLES:
-        if not regle.s_applique_a(document.langue):
-            continue
-        if regle.id in desactivees:
-            continue
-        findings.extend(regle.check(document))
+    for regle in regles(document.langue):
+        if regle.id not in desactivees:
+            findings.extend(regle.check(document))
 
     return sorted(findings, key=lambda f: (f.char_start, f.char_end))

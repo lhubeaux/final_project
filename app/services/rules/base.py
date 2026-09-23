@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-from app.services.document import Document
+from app.services.ingestion.document import Document
 
 
 @dataclass(frozen=True)

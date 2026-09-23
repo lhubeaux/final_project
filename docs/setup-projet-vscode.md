@@ -1,6 +1,6 @@
 # Environnement de développement
 
-*Mise à jour : 21 septembre 2026 — phase 3 en cours.*
+*Mise à jour : 23 septembre 2026 — fonctionnalités gelées.*
 
 *Ce document dit **comment le projet tourne**. Les décisions de conception sont dans [synthese-projet-langage-clair.md](synthese-projet-langage-clair.md), le calendrier dans [plan-de-travail.md](plan-de-travail.md).*
 
@@ -24,7 +24,7 @@ L'application ne change pas d'un environnement à l'autre : une application Flas
 | Emplacement | `C:\Users\Louis_Admin\Documents\PythonFS\final_project` |
 | Environnement | `.venv` local |
 | Dépendances | installées, modèle spaCy français compris |
-| Tests | `pytest` découvert par VS Code ; 39 passent, plus un `xfail` assumé |
+| Tests | `pytest` découvert par VS Code ; 48 passent, plus un `xfail` assumé |
 
 **Paquets installés et vérifiés :** Flask 3.1.3, Flask-SQLAlchemy 3.1.1, Flask-Migrate 4.1.0, python-dotenv 1.2.3, charset-normalizer 3.5.1, python-docx 1.2.0, odfpy 1.4.1, pysbd 0.3.4, defusedxml 0.7.1, spacy 3.8.16, **fr_core_news_sm 3.8.0**, pytest 9.1.1. *`defusedxml` n'est pas importé par le code du projet mais par odfpy, qui l'utilise pour lire le XML d'un `.odt`. La ligne de `requirements.txt` est donc redondante ; elle est gardée pour rendre la protection visible et pour tenir si odfpy changeait de parseur.* `fr_core_news_md` 3.8.0 est aussi présent pour comparaison, mais le projet utilise `sm` et seul ce dernier est épinglé dans `requirements.txt`.
 
@@ -96,34 +96,37 @@ final_project/
 │   ├── repositories.py        # accès aux données : tout le SQL
 │   ├── cli.py                 # commande flask seed
 │   ├── routes/
-│   │   ├── analyze.py         # saisie, résultats
+│   │   ├── analyze.py         # saisie, résultats, analyses enregistrées
 │   │   └── admin.py           # écran des listes de mots
 │   ├── services/
 │   │   ├── extraction/        # registre + un module par format
-│   │   │   ├── registry.py    # interface commune + enregistrement
+│   │   │   ├── base.py        # type Extracteur, erreurs d'import
+│   │   │   ├── registry.py    # table REGISTRE, extraire()
 │   │   │   ├── txt.py
 │   │   │   ├── docx.py
 │   │   │   ├── odt.py
 │   │   │   └── md.py
-│   │   ├── document.py        # dataclasses métier, build_document()
-│   │   ├── normalization.py   # BOM, fins de ligne, NFC, apostrophes, insécables
-│   │   ├── segmentation.py    # paragraphes et phrases (pysbd)
-│   │   ├── tokenization.py    # tokens grossiers avec positions
-│   │   ├── linguistics.py     # unique point de contact avec spaCy
+│   │   ├── ingestion/         # texte brut -> Document
+│   │   │   ├── document.py        # dataclasses métier, build_document()
+│   │   │   ├── normalization.py   # BOM, fins de ligne, NFC, apostrophes, insécables
+│   │   │   ├── segmentation.py    # paragraphes et phrases (pysbd)
+│   │   │   ├── tokenization.py    # tokens grossiers avec positions
+│   │   │   └── linguistics.py     # unique point de contact avec spaCy
 │   │   ├── rendering.py       # échappement HTML et surlignage
 │   │   └── rules/
 │   │       ├── base.py        # classe Rule, dataclass Finding
 │   │       ├── runner.py      # registre, exécution, filtrage par langue
 │   │       ├── seuils.py      # seuils par langue
-│   │       ├── lexiques.py    # listes de mots par langue
+│   │       ├── lexiques.py    # lit les listes de mots en base
 │   │       ├── fr.py          # longueur_phrase, connecteurs_lourds, passif
 │   │       └── en.py          # (vide)
-│   ├── templates/analyze/index.html
-│   └── static/                # css/style.css, js/app.js
+│   ├── templates/             # base.html, analyze/index.html, analyze/analyses.html, admin/listes.html
+│   └── static/                # css/style.css (onze sections, variables de couleur), js/app.js
 ├── data/seeds/                # lexiques.json : source versionnée des listes de mots
 ├── scripts/                   # futur script d'amorce, hors application (vide)
-├── tests/                     # positions, règles, passif, smoke
-├── migrations/                # Alembic, première migration écrite
+├── tests/                     # positions, règles, passif, validation, admin, historique, smoke
+├── migrations/                # Alembic : trois entités, listes de mots, nom des analyses
+├── exemples/                  # textes de démonstration, un par format
 ├── instance/                  # base SQLite locale — non versionnée
 ├── docs/                      # documentation du projet, versionnée
 ├── .env.example

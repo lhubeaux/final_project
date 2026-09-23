@@ -37,7 +37,7 @@ Les sections ne se lisent pas d'une traite. Prends celle dont tu as besoin, écr
 
 **La configuration par variables d'environnement.** `app.config.from_object(Config)` où `Config` lit `os.environ`. Le principe : le code est identique partout, seule la configuration change. C'est ce qui rend une conteneurisation ultérieure presque gratuite.
 
-**POST-Redirect-GET.** Après un POST qui modifie quelque chose, renvoyer une redirection plutôt qu'une page. Sinon un rafraîchissement du navigateur rejoue la soumission. À appliquer sur les écrans *Règles* et *Listes de mots*. *(Appliqué le 21/09 sur l'écran des listes : chaque ajout ou suppression répond par une redirection vers `/listes/#liste-N`.)*
+**POST-Redirect-GET.** Après un POST qui modifie quelque chose, renvoyer une redirection plutôt qu'une page. Sinon un rafraîchissement du navigateur rejoue la soumission. À appliquer sur les écrans *Règles* et *Listes de mots*. *(Appliqué le 21/09 sur l'écran des listes : chaque ajout ou suppression répond par une redirection vers `/listes/#liste-N`. Puis le 23/09 sur l'enregistrement d'une analyse, qui redirige vers `/analyses/<id>`.)*
 
 ### Jinja2 — le moteur de gabarits
 
@@ -108,7 +108,7 @@ Tu n'en as pas besoin tout de suite, mais tu y viendras dès que tu auras deux p
 
 ## 2. Persistance : ORM, sessions, migrations
 
-> **Tu en as besoin pour écrire :** `app/models.py`, `app/repositories.py`, et pour lancer les migrations.
+> **Tu en as besoin pour écrire :** `app/models/`, `app/repositories.py`, et pour lancer les migrations.
 
 ### Ce qu'il faut savoir
 
@@ -147,7 +147,7 @@ Le principe sous-jacent porte un nom : le **principe ouvert/fermé** — ouvert 
 
 ### L'inversion de dépendance
 
-`services/linguistics.py` est le seul fichier qui importe spaCy. Les règles dépendent de *ton* interface, pas de la bibliothèque. Conséquence concrète et démontrable : changer de modèle, ou remplacer spaCy, ne touche qu'un fichier. C'est le seul isolement du projet qui rapporte vraiment quelque chose — et il faut savoir expliquer pourquoi les autres n'en valaient pas la peine.
+`services/ingestion/linguistics.py` est le seul fichier qui importe spaCy. Les règles dépendent de *ton* interface, pas de la bibliothèque. Conséquence concrète et démontrable : changer de modèle, ou remplacer spaCy, ne touche qu'un fichier. C'est le seul isolement du projet qui rapporte vraiment quelque chose — et il faut savoir expliquer pourquoi les autres n'en valaient pas la peine.
 
 ### Le motif *repository*
 
@@ -171,7 +171,7 @@ Attention au piège de nommage : tu auras probablement **deux** `Finding`, la `d
 
 ## 4. Texte, encodages et Unicode
 
-> **Tu en as besoin pour écrire :** `services/normalization.py` — et pour ne pas décaler tous tes surlignages.
+> **Tu en as besoin pour écrire :** `services/ingestion/normalization.py` — et pour ne pas décaler tous tes surlignages.
 
 C'est la partie invisible du projet, et celle qui produit les bugs les plus coûteux.
 
@@ -204,7 +204,7 @@ Or tes `Finding` portent des empans de caractères (`char_start`, `char_end`). *
 
 ## 5. Segmentation et tokenisation
 
-> **Tu en as besoin pour écrire :** `services/segmentation.py` et `services/tokenization.py`.
+> **Tu en as besoin pour écrire :** `services/ingestion/segmentation.py` et `services/ingestion/tokenization.py`.
 
 ### Ce qu'il faut savoir
 
@@ -234,7 +234,7 @@ Or tes `Finding` portent des empans de caractères (`char_start`, `char_end`). *
 
 ## 6. spaCy et l'analyse en dépendances
 
-> **Tu en as besoin pour écrire :** `services/linguistics.py` et la détection du passif dans `services/rules/fr.py`.
+> **Tu en as besoin pour écrire :** `services/ingestion/linguistics.py` et la détection du passif dans `services/rules/fr.py`.
 
 C'est la section technique du projet, et **le passage de la soutenance qui te distinguera**. À maîtriser sérieusement.
 

@@ -9,6 +9,7 @@ from app.models.base import db, maintenant
 if TYPE_CHECKING:
     from app.models.analysis import Analysis
 
+
 class DocumentRecord(db.Model):
     """Un texte soumis.
 

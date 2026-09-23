@@ -18,9 +18,13 @@ class Analysis(db.Model):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
+    nom: Mapped[str]                       # donné par l'utilisateur à l'enregistrement
     cree_le: Mapped[datetime] = mapped_column(default=maintenant)
 
     document: Mapped["DocumentRecord"] = relationship(back_populates="analyses")
     findings: Mapped[list["FindingRecord"]] = relationship(
-        back_populates="analysis", cascade="all, delete-orphan"
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+        order_by="FindingRecord.id",      # ordre d'insertion = ordre de run()
     )
+

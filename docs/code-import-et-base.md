@@ -1,6 +1,6 @@
 # Le code de l'import et du lien à la base
 
-*Rédigé le 21 septembre 2026. Couvre le travail du vendredi 18 (import de fichiers) et du lundi 21 (parcours d'erreur, listes de mots en base, écran des listes).*
+*Rédigé le 21 septembre 2026. Couvre le travail du vendredi 18 (import de fichiers) et du lundi 21 (parcours d'erreur, listes de mots en base, écran des listes). Revu le 23 septembre : depuis le 22, les deux registres sont des tables littérales et le décorateur `@enregistrer` a disparu (§2) ; `index()` est réécrite en retours anticipés (§7) ; la partie 4 couvre l'enregistrement des analyses.*
 
 Ce document explique le code **ligne par ligne**, dans l'ordre où une requête le traverse. Il complète trois autres documents sans les répéter :
 
@@ -42,6 +42,14 @@ Ici, on ouvre les fichiers. Chaque section cite le code tel qu'il est dans le d�
 **Partie 3 — Le fichier de test**
 
 21. [`exemples/paragraphes-de-test.txt`](#21-exemplesparagraphes-de-testtxt)
+
+**Partie 4 — L'enregistrement des analyses**
+
+22. [Le modèle et la migration](#22-le-modèle-et-la-migration)
+23. [Le repository](#23-le-repository)
+24. [Les routes : enregistrer, relire, lister](#24-les-routes--enregistrer-relire-lister)
+25. [Le gabarit](#25-le-gabarit)
+26. [Les tests](#26-les-tests)
 
 [Récapitulatif des notions](#récapitulatif-des-notions)
 
@@ -387,21 +395,37 @@ Côté sécurité, odfpy lit son XML avec `defusedxml`, qui neutralise les attaq
 ### `page()`
 
 ```python
-def page(document=None, findings=None, texte_surligne=None, resume=None, erreur=None):
+def resumer(findings, langue):
+    comptes = Counter(finding.rule_id for finding in findings)
+    return [(regle.hint, comptes[regle.id]) for regle in regles(langue)]
+
+
+def page(document=None, findings=(), erreur=None, nom_fichier=None, analyse=None):
+    texte_surligne, resume = None, []
+    if document is not None:
+        texte_surligne = surligner(document.texte, findings)
+        resume = resumer(findings, document.langue)
     return render_template(
         "analyze/index.html",
         document=document,
-        findings=findings or [],
+        findings=findings,
         texte_surligne=texte_surligne,
-        resume=resume or [],
+        resume=resume,
         erreur=erreur,
+        nom_fichier=nom_fichier,
+        analyse=analyse,
+        nom_max=NOM_MAX,
         extensions=extensions_supportees(),
     )
 ```
 
-Le rendu unique de la page d'analyse. Tous les paramètres ont une valeur par défaut : on peut appeler `page(erreur="…")` seul.
+Le rendu unique de la page d'analyse. Tous les paramètres ont une valeur par défaut : on peut appeler `page(erreur="…")` seul. Les trois routes qui affichent une analyse — `index()`, `enregistrer()` et `relire()` — et le gestionnaire du 413 passent tous par ici.
 
-`findings or []` : un piège classique de Python l'explique. On n'écrit jamais `def page(findings=[])`, parce que la liste par défaut est créée **une seule fois**, à la définition de la fonction, puis partagée entre tous les appels. On met `None` par défaut, et on fabrique une liste neuve dans le corps.
+**`page()` calcule elle-même le surlignage et le résumé.** Chaque appelant lui donne un document et ses findings ; elle en tire `surligner(...)` et `resumer(...)`. Les deux calculs ne sont écrits qu'à un endroit.
+
+**`findings=()`** : un tuple vide par défaut, et non une liste. On n'écrit jamais `def page(findings=[])`, parce que la valeur par défaut est créée **une seule fois**, à la définition de la fonction, puis partagée entre tous les appels : une liste modifiée par un appel le serait pour les suivants. Un tuple ne se modifie pas, le piège disparaît.
+
+**`resumer()`** : `Counter` compte les signalements par règle. `comptes[regle.id]` renvoie `0` pour une règle absente, au lieu de lever une `KeyError` : c'est ce qui permet d'afficher les règles qui n'ont rien trouvé.
 
 `extensions=extensions_supportees()` est ajouté ici, et non par chaque appelant : impossible d'oublier la liste des formats.
 
@@ -424,22 +448,26 @@ Quand le corps d'une requête dépasse `MAX_CONTENT_LENGTH`, Flask lève une err
 
 ### `index()`, pas à pas
 
+La fonction est écrite en **retours anticipés** : chaque cas qui ne mène pas à une analyse sort aussitôt par un `return`. Il n'y a donc ni variable d'erreur à transporter jusqu'à la fin, ni test `if erreur is None`.
+
 ```python
-    if request.method == "POST":
-        fichier = request.files.get("fichier")
+    if request.method == "GET":
+        return page()
+
+    fichier = request.files.get("fichier")
 ```
 
 `request.files` contient les fichiers téléversés, indexés par le `name` du champ HTML. `.get()` renvoie `None` si le champ est absent. `fichier` est un objet `FileStorage` de Werkzeug.
 
 ```python
-        try:
-            if fichier and fichier.filename:
-                texte_brut = extraire(fichier.filename, fichier.stream)
-            else:
-                texte_brut = request.form.get("texte", "")
-        except ExtractionError as echec:
-            erreur = str(echec)
-            texte_brut = ""
+    try:
+        # Le fichier l'emporte sur la zone de texte : c'est le geste le plus explicite.
+        if fichier and fichier.filename:
+            texte_brut = extraire(fichier.filename, fichier.stream)
+        else:
+            texte_brut = request.form.get("texte", "")
+    except ExtractionError as echec:
+        return page(erreur=str(echec))
 ```
 
 - **`fichier and fichier.filename`.** Quand l'utilisateur ne choisit aucun fichier, le navigateur envoie quand même le champ, avec un nom vide. `filename` vaut alors `""`, qui est faux. Ce double test couvre les deux cas : champ absent, champ vide.
@@ -449,33 +477,25 @@ Quand le corps d'une requête dépasse `MAX_CONTENT_LENGTH`, Flask lève une err
 - **`str(echec)`** donne le message de l'exception, écrit pour l'utilisateur. La route ne le reformule pas.
 
 ```python
-        maximum = current_app.config["MAX_TEXT_LENGTH"]
-        if len(texte_brut) > maximum:
-            erreur = (
-                f"Texte trop long : {len(texte_brut)} caractères "
-                f"pour {maximum} au maximum."
-            )
-            texte_brut = ""
+    maximum = current_app.config["MAX_TEXT_LENGTH"]
+    if len(texte_brut) > maximum:
+        return page(
+            erreur=f"Texte trop long : {len(texte_brut)} caractères pour {maximum} au maximum."
+        )
+    if not texte_brut.strip():
+        return page(erreur="Aucun texte à analyser.")
 ```
 
-La vérification de longueur, **au niveau du `try`**, pas à l'intérieur du `except` : elle doit s'exécuter dans tous les cas. L'attribut `maxlength` du formulaire n'existe que dans le navigateur ; un envoi direct le contourne. Vider `texte_brut` fait échouer le test suivant, et le message est déjà prêt.
+- **La vérification de longueur** vient après le `try`, pas dedans : elle vaut pour le texte collé comme pour le fichier. L'attribut `maxlength` du formulaire n'existe que dans le navigateur ; un envoi direct le contourne.
+- **`.strip()`** retire les blancs de bord : un texte fait d'espaces et de lignes vides est traité comme vide.
 
 ```python
-        if texte_brut.strip():
-            document = build_document(texte_brut, langue="fr")
-            findings = run(document)
-            texte_surligne = surligner(document.texte, findings)
-            comptes = Counter(finding.rule_id for finding in findings)
-            resume = [(regle.hint, comptes[regle.id]) for regle in regles(document.langue)]
-        elif erreur is None:
-            erreur = "Aucun texte à analyser."
+    document = build_document(texte_brut, langue="fr")
+    nom_fichier = fichier.filename if fichier and fichier.filename else None
+    return page(document=document, findings=run(document), nom_fichier=nom_fichier)
 ```
 
-- **`.strip()`** retire les blancs de bord : un texte fait d'espaces et de lignes vides est traité comme vide.
-- **`Counter`** compte les signalements par règle. `comptes[regle.id]` renvoie `0` pour une règle absente, au lieu de lever une `KeyError` : c'est ce qui permet d'afficher les règles qui n'ont rien trouvé.
-- **`elif erreur is None`** : le message « Aucun texte » ne remplace pas une erreur déjà posée (fichier refusé, texte trop long).
-
-La fin de `index()` appelle `render_template(...)` avec les mêmes arguments que `page()`. Les deux sont équivalents ; écrire `return page(document=document, findings=findings, ...)` retirerait la répétition.
+Arrivé ici, le texte est valide. `index()` n'enregistre rien : elle transmet le nom du fichier importé à `page()`, qui le glisse dans le formulaire d'enregistrement (partie 4).
 
 ## 8. La configuration : `config.py`
 
@@ -496,11 +516,11 @@ Ces attributs sont évalués **une fois**, quand Python lit la classe. `TestConf
 
 ```html
 <form method="post" enctype="multipart/form-data">
-  <textarea id="texte" name="texte" rows="8" maxlength="20000">…</textarea>
+  <textarea id="texte" name="texte" rows="8" maxlength="{{ config.MAX_TEXT_LENGTH }}">…</textarea>
   <p class="depot">
     <label for="fichier">ou déposer un fichier :</label>
     <input id="fichier" type="file" name="fichier" accept="{{ extensions | join(',') }}">
-    <span class="formats">{{ extensions | join(' · ') }} — 2 Mo maximum</span>
+    <span class="formats">{{ extensions | join(' · ') }} — {{ config.MAX_CONTENT_LENGTH // (1024 * 1024) }} Mo maximum</span>
   </p>
   …
 </form>
@@ -1057,10 +1077,16 @@ La suppression suit le même schéma : `repositories.supprimer_entree()`, `abort
 <!-- base.html -->
 <nav class="menu">
   <a href="{{ url_for('analyze.index') }}"
-     class="{{ 'actif' if request.blueprint == 'analyze' }}">Analyse</a>
+     class="{{ 'actif' if request.endpoint == 'analyze.index' }}">Analyse</a>
+  <a href="{{ url_for('analyze.analyses') }}"
+     class="{{ 'actif' if request.endpoint in ('analyze.analyses', 'analyze.relire') }}">Analyses enregistrées</a>
   <a href="{{ url_for('admin.listes') }}"
      class="{{ 'actif' if request.blueprint == 'admin' }}">Listes de mots</a>
 </nav>
+
+{% for categorie, message in get_flashed_messages(with_categories=true) %}
+  <p class="{{ categorie }}">{{ message }}</p>
+{% endfor %}
 
 {% block contenu %}{% endblock %}
 
@@ -1079,19 +1105,13 @@ La suppression suit le même schéma : `repositories.supprimer_entree()`, `abort
 
 `base.html` est un **gabarit parent** : il contient la structure commune et des *blocs* vides. Une page enfant déclare `{% extends "base.html" %}` et remplit les blocs. Le menu n'existe ainsi qu'à un seul endroit.
 
-- **`request.blueprint`** vaut le nom du blueprint de la route qui répond : `analyze` ou `admin`. Il permet de souligner le lien de la page courante.
+- **`request.blueprint`** vaut le nom du blueprint de la route qui répond : `analyze` ou `admin`. Il suffit pour *Listes de mots*. Les deux premiers liens appartiennent au même blueprint `analyze` : ils se distinguent par **`request.endpoint`**, le nom complet de la route, comme `analyze.relire`.
 - **`'actif' if …`** sans `else` : Jinja produit une chaîne vide quand la condition est fausse.
 - **Le bloc `scripts`** n'est rempli que par la page d'analyse, la seule qui utilise `app.js`.
 
+- **Les messages `flash`** sont affichés dans `base.html`, sous le menu : depuis le 23 septembre, deux écrans en émettent — les listes de mots et l'enregistrement d'une analyse. `get_flashed_messages()` récupère les messages mis de côté par `flash()`, **et les efface** : ils ne s'affichent qu'une fois. Avec `with_categories=true`, chaque élément est un couple `(catégorie, message)`. La catégorie devient la classe CSS : `erreur` ou `succes`.
+
 ### La page des listes
-
-```html
-{% for categorie, message in get_flashed_messages(with_categories=true) %}
-  <p class="{{ categorie }}">{{ message }}</p>
-{% endfor %}
-```
-
-`get_flashed_messages()` récupère les messages mis de côté par `flash()`, **et les efface** : ils ne s'affichent qu'une fois. Avec `with_categories=true`, chaque élément est un couple `(catégorie, message)`. La catégorie devient la classe CSS : `erreur` ou `succes`.
 
 ```html
 {% for liste in listes %}
@@ -1193,13 +1213,196 @@ Pensez ensuite à supprimer l'entrée ajoutée, pour retrouver les listes d'orig
 
 ---
 
+# Partie 4 — L'enregistrement des analyses
+
+*Ajouté le 23 septembre, dernier travail avant le gel des fonctionnalités.*
+
+Une analyse ne s'enregistre que si l'utilisateur le demande, sous un nom. Le trajet :
+
+```
+POST /  ──► index() ──► page() : résultat + formulaire « nom » (texte normalisé en champ caché)
+                                        │
+POST /analyses/ ──► enregistrer() ──► build_document() + run() ──► enregistrer_analyse() ──► base
+                                        │ 302
+GET /analyses/<id> ──► relire() ──► lire_analyse() ──► build_document() ──► page() : même surlignage
+```
+
+## 22. Le modèle et la migration
+
+```python
+class Analysis(db.Model):
+    """Une analyse que l'utilisateur a choisi d'enregistrer, sous un nom."""
+
+    __tablename__ = "analyses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"))
+    nom: Mapped[str]                       # donné par l'utilisateur à l'enregistrement
+    cree_le: Mapped[datetime] = mapped_column(default=maintenant)
+
+    document: Mapped["DocumentRecord"] = relationship(back_populates="analyses")
+    findings: Mapped[list["FindingRecord"]] = relationship(
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+        order_by="FindingRecord.id",      # ordre d'insertion = ordre de run()
+    )
+```
+
+- **`nom: Mapped[str]`** : une colonne obligatoire, comme expliqué au §11.
+- **`order_by="FindingRecord.id"`** : sans ordre explicite, SQL rend les lignes dans un ordre quelconque. Or les rangs posés par `surligner()` dans `data-findings` doivent correspondre, un pour un, aux fiches affichées. Les signalements sont insérés dans l'ordre de `run()`, donc l'ordre des `id` le retrouve. Cette option ne concerne que l'ORM : elle ne demande aucune migration.
+
+La migration `1436e85304b1` a été générée par `flask db migrate`, puis **corrigée à la main** avant `flask db upgrade` :
+
+```python
+    with op.batch_alter_table('analyses', schema=None) as batch_op:
+        batch_op.add_column(sa.Column('nom', sa.String(), nullable=False, server_default='Sans nom'))
+```
+
+- **`batch_alter_table`** : SQLite sait mal modifier une table existante. Alembic recopie alors la table dans une nouvelle, modifiée, puis remplace l'ancienne. Flask-Migrate l'active d'office pour SQLite.
+- **`server_default='Sans nom'`** : la table contenait déjà une analyse. Une colonne `NOT NULL` sans valeur par défaut ne peut pas être remplie pour cette ligne, et la migration échouait (`ALTER TABLE analyses ADD COLUMN nom VARCHAR NOT NULL`). La valeur par défaut est donnée *par la base*, d'où `server_`.
+
+C'est l'exemple même du §12 : l'autogénération ne voit que le schéma, jamais les données déjà présentes.
+
+## 23. Le repository
+
+```python
+def enregistrer_analyse(
+    nom: str,
+    document: "Document",
+    findings: list["Finding"],
+    nom_fichier: str | None = None,
+) -> int:
+    analyse = Analysis(
+        nom=nom,
+        document=DocumentRecord(
+            texte=document.texte,
+            langue=document.langue,
+            source="fichier" if nom_fichier else "saisie",
+            nom_fichier=nom_fichier,
+        ),
+        findings=[FindingRecord(**asdict(finding)) for finding in findings],
+    )
+    db.session.add(analyse)
+    db.session.commit()
+    return analyse.id
+```
+
+- **On enregistre le texte normalisé et les empans, jamais le HTML.** Le HTML se refait à la relecture. Le stocker ferait deux vérités, obligerait à le marquer sûr avec `Markup` en le relisant — une faille XSS si quelqu'un modifie la base — et figerait les anciennes analyses dans les classes CSS du jour.
+- **`asdict(finding)`** transforme la dataclass en dictionnaire `{"rule_id": …, "char_start": …}`. **`**`** le déballe en arguments nommés. La ligne ne fonctionne que parce que `Finding` et `FindingRecord` ont exactement les mêmes champs : c'est D-6, et c'est la seule traduction entre les deux types dans tout le projet.
+- **Un seul `add`** suffit : les relations cascadent. Le `DocumentRecord` et les `FindingRecord` entrent dans la session avec l'`Analysis`, et `commit()` écrit les trois tables en une transaction.
+- **`analyse.id`** n'existe qu'après `commit()` : c'est la base qui attribue la clé primaire.
+
+```python
+if TYPE_CHECKING:      # import réel interdit : rules -> lexiques -> repositories ferait un cycle
+    from app.services.ingestion.document import Document
+    from app.services.rules.base import Finding
+```
+
+**`TYPE_CHECKING`** vaut `False` à l'exécution et `True` pour l'éditeur. Les imports placés dessous servent aux annotations, écrites entre guillemets (`"Document"`), sans être exécutés. Un import réel de `rules.base` passerait par `rules/__init__.py`, puis `runner`, `fr`, `lexiques`… qui importe `repositories`, encore en cours de chargement : un cycle.
+
+`lire_analyse()` et `toutes_les_analyses()` reprennent les motifs du §14 : `db.session.get()` par clé primaire, et `select(...).order_by(Analysis.cree_le.desc())` pour la plus récente d'abord.
+
+## 24. Les routes : enregistrer, relire, lister
+
+```python
+@bp.post("/analyses/")
+def enregistrer():
+    texte = request.form.get("texte", "")
+    nom = " ".join(request.form.get("nom", "").split())
+    nom_fichier = request.form.get("nom_fichier") or None
+
+    if not texte.strip() or len(texte) > current_app.config["MAX_TEXT_LENGTH"]:
+        abort(400)      # champ caché modifié à la main : ce n'est pas un parcours utilisateur
+
+    document = build_document(texte, langue="fr")
+    findings = run(document)
+    if not nom or len(nom) > NOM_MAX:
+        return page(
+            document=document, findings=findings, nom_fichier=nom_fichier,
+            erreur=f"Donnez un nom à l'analyse, {NOM_MAX} caractères au maximum.",
+        )
+
+    analysis_id = repositories.enregistrer_analyse(nom, document, findings, nom_fichier=nom_fichier)
+    flash(f"Analyse « {nom} » enregistrée.", "succes")
+    return redirect(url_for("analyze.relire", analysis_id=analysis_id))
+```
+
+- **Le formulaire renvoie le texte, jamais les signalements.** Des empans venus du navigateur pourraient être n'importe quoi. La route relance donc l'analyse : les positions enregistrées sont calculées par le serveur.
+- **Pourquoi c'est le même résultat.** Le champ caché contient `document.texte`, déjà normalisé. `build_document()` le normalise encore une fois, et `normalize()` est **idempotente** : l'appliquer deux fois revient à l'appliquer une fois. Le texte, donc chaque empan, est celui qui était affiché.
+- **Les CRLF.** À l'envoi d'un formulaire, un navigateur transforme chaque retour à la ligne en `\r\n`. La deuxième transformation de `normalize()` les ramène à `\n`. C'est testé (§26).
+- **`" ".join(....split())`** : le nettoyage déjà vu au §18, appliqué au nom.
+- **`abort(400)`** : un champ caché vide ou trop long ne vient pas d'un utilisateur, mais d'une requête fabriquée. On répond « requête invalide » sans page soignée.
+- **Un nom vide réaffiche l'analyse** avec son bandeau d'erreur, au lieu de la perdre.
+- **POST-Redirect-GET**, comme au §18 : la redirection mène à la page de l'analyse enregistrée, et rafraîchir ne crée pas de doublon.
+
+```python
+@bp.get("/analyses/<int:analysis_id>")
+def relire(analysis_id):
+    analyse = repositories.lire_analyse(analysis_id)
+    if analyse is None:
+        abort(404)
+    document = build_document(analyse.document.texte, langue=analyse.document.langue)
+    return page(document=document, findings=analyse.findings, analyse=analyse)
+```
+
+- **Les règles ne sont pas relancées.** `findings=analyse.findings` passe les signalements enregistrés : si une liste de mots a changé depuis, on voit bien ceux de l'époque.
+- **`build_document()` reconstruit le `Document`**, dont le gabarit a besoin pour le diagnostic des positions. Idempotence encore : le texte ne bouge pas.
+- **Des `FindingRecord` là où `page()` attend des `Finding`.** `surligner()` lit `rule_id`, `char_start` et `char_end` ; le gabarit, `message`, `hint`, `severity` et `suggestion`. Un `FindingRecord` porte exactement ces attributs. Python ne vérifie pas le type, seulement la présence des attributs : c'est le *duck typing*.
+
+`@bp.get("/analyses/")` et `@bp.post("/analyses/")` partagent la même adresse : `GET` liste, `POST` crée. Flask choisit la fonction d'après la méthode HTTP.
+
+## 25. Le gabarit
+
+```html
+  {% if analyse %}
+    <p class="formats">« {{ analyse.nom }} » — enregistrée le {{ analyse.cree_le.strftime('%d/%m/%Y') }}</p>
+  {% else %}
+    <form method="post" action="{{ url_for('analyze.enregistrer') }}" class="ajout">
+      <input type="hidden" name="texte" value="{{ document.texte }}">
+      {% if nom_fichier %}<input type="hidden" name="nom_fichier" value="{{ nom_fichier }}">{% endif %}
+      <input name="nom" placeholder="nom de l'analyse" maxlength="{{ nom_max }}" required>
+      <button type="submit">Enregistrer</button>
+    </form>
+  {% endif %}
+```
+
+- **Un second formulaire**, distinct de celui d'analyse. Si l'utilisateur modifie la zone de texte après l'analyse, c'est le texte *affiché surligné* qui s'enregistre, pas sa version retouchée.
+- **`value="{{ document.texte }}"`** : Jinja échappe les guillemets et les chevrons. Un texte contenant `"` ou `<script>` ne peut pas sortir de l'attribut.
+- **`required` et `maxlength`** sont un confort ; le serveur revérifie, comme toujours.
+- **La date seule** : `cree_le` est en UTC, une heure affichée aurait 2 h de retard sur Paris.
+
+## 26. Les tests
+
+`tests/test_historique.py`, neuf cas. Deux méritent d'être lus :
+
+```python
+def test_les_crlf_du_navigateur_ne_decalent_rien(client):
+    affichee = client.post("/", data={"texte": TEXTE}).get_data(as_text=True)
+    enregistrer(client, texte=TEXTE.replace("\n", "\r\n"))
+    relue = client.get("/analyses/1").get_data(as_text=True)
+
+    assert texte_surligne(relue) == texte_surligne(affichee)
+
+
+def test_normaliser_deux_fois_ne_change_rien():
+    brut = "﻿Titre\r\n\r\nL’été tran­smis."
+    texte = build_document(brut).texte
+    assert build_document(texte).texte == texte
+```
+
+- Le premier simule ce que fait un vrai navigateur, que le client de test de Flask ne fait pas : renvoyer des `\r\n`. Il compare le HTML surligné avant et après l'aller-retour par la base.
+- Le second garde la propriété dont tout dépend : l'idempotence. Le texte de départ cumule un BOM, des CRLF, des accents décomposés, une apostrophe courbe, une espace insécable et un trait d'union conditionnel — les six transformations d'un coup.
+
+`texte_surligne()` extrait le contenu de `<div class="texte">` avec une expression régulière (`re.S` : le point attrape aussi les retours à la ligne).
+
+---
+
 ## Récapitulatif des notions
 
 | Notion | Où |
 |---|---|
 | Hiérarchie d'exceptions, `raise … from` | §1, §5 |
 | Alias de type, `Callable`, `BinaryIO` | §1 |
-| Fabrique de décorateurs, fermeture, `*args` | §1 |
 | Import pour effet de bord, `__all__`, `# noqa` | §2 |
 | `bytes` et `str`, `decode`, BOM | §3 |
 | Expressions régulières : `MULTILINE`, groupes, `\1`, non gourmand | §4 |
@@ -1221,3 +1424,9 @@ Pensez ensuite à supprimer l'entrée ajoutée, pour retrouver les listes d'orig
 | Blueprint, `url_prefix`, convertisseur `<int:…>`, `abort` | §18 |
 | `flash`, POST-Redirect-GET, `url_for` et `_anchor` | §18 |
 | Héritage de gabarits Jinja, blocs, filtres, échappement | §19 |
+| `request.endpoint`, messages `flash` dans le gabarit commun | §19 |
+| Retours anticipés, valeur par défaut immuable | §7 |
+| `order_by` sur une relation, `server_default`, `batch_alter_table` | §22 |
+| `asdict` et déballage `**`, cascade à l'insertion, `TYPE_CHECKING` | §23 |
+| Idempotence, `abort(400)`, duck typing, même URL en `GET` et `POST` | §24 |
+| Champ caché, échappement d'attribut | §25 |

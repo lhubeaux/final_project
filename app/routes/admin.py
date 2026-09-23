@@ -1,7 +1,7 @@
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from app import repositories
-from app.services.normalization import normalize
+from app.services.ingestion.normalization import normalize
 
 bp = Blueprint("admin", __name__, url_prefix="/listes")
 

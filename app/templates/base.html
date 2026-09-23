@@ -9,10 +9,16 @@
 
 <nav class="menu">
   <a href="{{ url_for('analyze.index') }}"
-     class="{{ 'actif' if request.blueprint == 'analyze' }}">Analyse</a>
+     class="{{ 'actif' if request.endpoint == 'analyze.index' }}">Analyse</a>
+  <a href="{{ url_for('analyze.analyses') }}"
+     class="{{ 'actif' if request.endpoint in ('analyze.analyses', 'analyze.relire') }}">Analyses enregistrées</a>
   <a href="{{ url_for('admin.listes') }}"
      class="{{ 'actif' if request.blueprint == 'admin' }}">Listes de mots</a>
 </nav>
+
+{% for categorie, message in get_flashed_messages(with_categories=true) %}
+  <p class="{{ categorie }}">{{ message }}</p>
+{% endfor %}
 
 {% block contenu %}{% endblock %}
 

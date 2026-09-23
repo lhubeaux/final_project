@@ -4,7 +4,7 @@ Application Flask qui analyse un texte administratif en français, signale les
 obstacles à la clarté et affiche chaque signalement dans le texte. Référentiel :
 les dix principes de rédaction claire des institutions européennes.
 
-**Échéance : lundi 28 septembre 2026. Gel des fonctionnalités : vendredi 25 septembre au soir.**
+**Échéance : lundi 28 septembre 2026. Fonctionnalités gelées le mercredi 23 septembre** (prévu le vendredi 25).
 
 ## Collaboration
 
@@ -84,7 +84,7 @@ Le HTML est échappé segment par segment avant l'insertion de `<mark>`. Ne jama
 | Entrée | Un texte à la fois ; français d'abord. |
 | Formats | `.txt`, `.md`, `.docx`, `.odt` acceptés ; `.pdf` et `.doc` refusés avec un message dédié. |
 | Objet des règles | `check(document)` reçoit le `Document` métier, jamais Flask ou spaCy. |
-| spaCy | Seul `services/linguistics.py` importe spaCy. Les règles lisent `Sentence.analyse`. |
+| spaCy | Seul `services/ingestion/linguistics.py` importe spaCy. Les règles lisent `Sentence.analyse`. |
 | Signalement | Toute règle renvoie un `Finding` avec un empan absolu. |
 | Persistance | `Finding` est une dataclass de transport ; `FindingRecord` est le modèle SQLAlchemy. |
 | Extensibilité | Un registre pour les règles, un pour les extracteurs : même motif, deux axes. Tous deux sont des tables littérales, `REGLES` et `REGISTRE` ; pas d'enregistrement par décorateur. |
@@ -100,16 +100,18 @@ app/
 ├── config.py                   configuration par environnement
 ├── cli.py                      commande flask seed
 ├── models/                     DocumentRecord, Analysis, FindingRecord, WordList, WordEntry
-├── repositories.py             tout le SQL : amorçage, lecture et édition des listes
-├── routes/analyze.py           GET/POST /, orchestration de l'analyse
+├── repositories.py             tout le SQL : listes de mots, analyses enregistrées
+├── routes/analyze.py           GET/POST / ; /analyses/ : lister, enregistrer, relire
 ├── routes/admin.py             /listes/ : afficher, ajouter, supprimer des entrées
-├── templates/                  base.html (menu commun), analyze/, admin/
+├── templates/                  base.html (menu, messages flash), analyze/, admin/
+├── static/                     css/style.css (onze sections, variables de couleur), js/app.js
 └── services/
-    ├── normalization.py        normalisation Unicode et espaces
-    ├── segmentation.py         paragraphes et phrases avec pysbd
-    ├── tokenization.py         tokens grossiers avec offsets
-    ├── linguistics.py          chargement spaCy et TokenLinguistique
-    ├── document.py             dataclasses métier et build_document()
+    ├── ingestion/              la chaîne qui fait d'un texte brut un Document
+    │   ├── normalization.py    normalisation Unicode et espaces
+    │   ├── segmentation.py     paragraphes et phrases avec pysbd
+    │   ├── tokenization.py     tokens grossiers avec offsets
+    │   ├── linguistics.py      chargement spaCy et TokenLinguistique
+    │   └── document.py         dataclasses métier et build_document()
     ├── rendering.py            échappement HTML et surlignage
     ├── extraction/
     │   ├── base.py             type Extracteur et erreurs d'import
@@ -130,10 +132,11 @@ app/
 La documentation détaillée de chaque module est dans
 `docs/guide-des-modules-python.md`.
 
-## État au 22 septembre
+## État au 23 septembre
 
-Phase 2 close le 18 septembre, import de fichiers compris. Phase 3 en cours,
-gel des fonctionnalités vendredi 25 au soir.
+Phase 2 close le 18 septembre, import de fichiers compris. **Fonctionnalités
+gelées le mercredi 23 septembre**, deux jours avant la date prévue : il ne reste
+que des tests, la documentation et la répétition.
 
 ### Fait
 
@@ -149,14 +152,16 @@ gel des fonctionnalités vendredi 25 au soir.
   dépendances seules).
 - Interface : le texte surligné reste visible pendant le défilement des fiches
   sur ordinateur ; une colonne sur mobile.
-- Tests : 39 passent, plus un `xfail` assumé (« La porte est ouverte »), en
+- Tests : 48 passent, plus un `xfail` assumé (« La porte est ouverte »), en
   moins de 3 secondes. L'invariant des positions est aussi vérifié sur
   `Sentence.analyse`.
 - Import de fichiers : registre d'extracteurs, `.txt`, `.md`, `.docx`, `.odt`,
   refus explicite de `.pdf` et `.doc`. Le fichier l'emporte sur la zone de
   texte. Erreurs d'import affichées telles quelles dans le formulaire.
-- Parcours d'erreur : `page()` est le rendu unique de l'écran, partagé par la
-  route et par `app_errorhandler(413)` ; `MAX_TEXT_LENGTH` est vérifié côté
+- Parcours d'erreur : `page()` est le rendu unique de l'écran, partagé par
+  toutes les routes et par `app_errorhandler(413)` ; elle calcule elle-même le
+  surlignage et le résumé. Le formulaire lit `maxlength` et le plafond en Mo
+  dans `config`, plus rien d'écrit en dur ; `MAX_TEXT_LENGTH` est vérifié côté
   serveur ; `MAX_FORM_MEMORY_SIZE` est aligné sur `MAX_CONTENT_LENGTH` pour
   qu'un texte trop long reçoive son propre message ; `tests/test_validation.py`
   couvre les neuf cas.
@@ -180,6 +185,25 @@ gel des fonctionnalités vendredi 25 au soir.
   `extraction/base.py`, comme `rules/base.py` : c'est ce qui évite le cycle
   `registry` → `docx` → `registry`. Aucun appelant n'a changé, les 39 tests
   passent à l'identique. `docs/` suit.
+- Analyses enregistrées, le 23 septembre : « Analyser » n'enregistre rien.
+  Sous le résultat, un formulaire demande un nom ; `POST /analyses/` relance
+  l'analyse sur le texte normalisé renvoyé en champ caché (jamais d'empans
+  venus du navigateur), l'enregistre via `repositories.enregistrer_analyse()`
+  puis redirige vers `/analyses/<id>` (POST-Redirect-GET). La relecture
+  reconstruit le `Document` et refait le surlignage depuis les `FindingRecord` :
+  le HTML n'est jamais stocké. Cela tient parce que `normalize()` est
+  idempotente. `Analysis.nom` et sa migration (`1436e85304b1`,
+  `server_default='Sans nom'`). `/analyses/` liste les analyses ; menu à trois
+  entrées ; messages flash dans `base.html`. `tests/test_historique.py` :
+  neuf cas, dont les CRLF renvoyés par le navigateur.
+- Mise en forme revue le 23 septembre : `style.css` en onze sections numérotées,
+  variables de couleur dans `:root` (les 153 déclarations sont restées
+  identiques), lignes vides et indentation corrigées dans le Python et les
+  gabarits.
+- Les cinq modules de la chaîne d'ingestion (normalisation, segmentation,
+  tokenisation, spaCy, `Document`) regroupés le 23 septembre dans
+  `services/ingestion/`, avec `git mv`. Seuls les imports ont changé ;
+  48 tests passent à l'identique.
 
 ### Limites connues
 
@@ -187,7 +211,11 @@ gel des fonctionnalités vendredi 25 au soir.
   passifs : spaCy étiquette le participe `VERB`, état et passif restent
   ambigus pour cette heuristique.
 - Tokenisation `\S+` : la ponctuation reste collée au mot.
-- La route n'enregistre pas encore les analyses en base.
+- **Bug silencieux possible** : l'enregistrement relance les règles ; si une
+  liste de mots change entre l'affichage et le clic sur « Enregistrer », les
+  signalements enregistrés diffèrent de ceux affichés.
+- `cree_le` est en UTC : seule la date est affichée, l'heure aurait 2 h de
+  retard. Le résumé d'une analyse relue part des règles actives aujourd'hui.
 - L'écran des listes n'a ni protection CSRF ni authentification : acceptable pour
   une application locale mono-utilisateur, à dire à l'oral. Flask-WTF réglerait le
   CSRF, mais c'est une nouvelle dépendance.
@@ -207,16 +235,16 @@ gel des fonctionnalités vendredi 25 au soir.
 
 ## Prochaine priorité
 
-Objectif de la semaine, jusqu'au gel de vendredi soir : la connexion à la
-base.
+Fonctionnalités gelées le 23 septembre. D'ici la soutenance, seulement des
+tests, de la documentation et la répétition.
 
-1. Enregistrer chaque analyse : `DocumentRecord`, `Analysis` et ses
-   `FindingRecord`, via le repository — la route ne touche jamais `db.session`.
+1. ~~Enregistrer les analyses~~ — fait le 23 septembre, sur demande et sous un nom.
 2. ~~Passer en base les connecteurs lourds et les verbes conjugués avec
    *être*~~ — fait le 21 septembre.
 3. Ajouter `tests/test_normalization.py` pour les six transformations.
-4. Vérifier l'échappement sur un texte contenant `<`, `>` et `&`.
-5. Si le temps reste : une quatrième règle.
+4. Ajouter un test d'échappement sur `<`, `>` et `&` (vérifié à la main le
+   23 septembre, sans test).
+5. ~~Une quatrième règle~~ — abandonnée avec le gel.
 
 Ordre de sacrifice : conteneurisation, export/historique, anglais,
 administration, règles supplémentaires, tokenisation fine.

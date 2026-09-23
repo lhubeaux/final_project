@@ -1,6 +1,6 @@
 # Analyseur de langage clair — décisions de conception
 
-*Mise à jour : 21 septembre 2026.*
+*Mise à jour : 23 septembre 2026.*
 
 *Ce document dit **quoi** et **pourquoi**. Le calendrier est dans [plan-de-travail.md](plan-de-travail.md), l'environnement dans [setup-projet-vscode.md](setup-projet-vscode.md), les révisions de soutenance dans [theorie.md](theorie.md).*
 
@@ -28,7 +28,7 @@ Chaque décision porte un identifiant, pour que les autres documents y renvoient
 | **D-4** | Normaliser une fois à l'entrée ; le texte normalisé fait référence | La normalisation change la longueur de la chaîne |
 | **D-5** | Toute règle renvoie un empan de caractères | Une seule forme à traiter côté affichage |
 | **D-6** | Deux types distincts : `Finding` et `FindingRecord` | Éviter la confusion transport / persistance |
-| **D-7** | spaCy isolé derrière `services/linguistics.py` | Un seul fichier à toucher si le modèle change |
+| **D-7** | spaCy isolé derrière `services/ingestion/linguistics.py` | Un seul fichier à toucher si le modèle change |
 | **D-8** | Le motif de registre, appliqué deux fois | Extracteurs et règles s'étendent sans modification |
 | **D-9** | Un module tant qu'il n'y a pas trois fichiers de même nature | L'arborescence reflète ce qui grossit vraiment |
 | **D-10** | Pas de score global sur 100 | Toute pondération serait arbitraire et indéfendable |
@@ -37,6 +37,7 @@ Chaque décision porte un identifiant, pour que les autres documents y renvoient
 | **D-13** | Développement en venv local ; conteneurisation en bonus facultatif | Non attendue dans l'évaluation ; l'infrastructure n'est pas le sujet |
 | **D-14** | Détection du passif = dépendances syntaxiques **+ heuristiques** | Les dépendances seules obtiennent 2 sur 6 (mesuré) |
 | **D-15** | Ponctuation conservée ; forme brute et forme normalisée stockées | Le texte reste reconstructible, la casse bascule sans retraitement |
+| **D-16** | Une analyse s'enregistre à la demande, sous un nom : texte normalisé et empans, jamais le HTML | Une seule vérité, relue à l'identique parce que `normalize()` est idempotente — *mis en œuvre le 23/09* |
 
 ---
 
@@ -122,6 +123,8 @@ Savoir dire en soutenance que c'est **la même idée employée à deux endroits*
 
 **Mise en œuvre, 18 septembre : les deux registres existent, et la différence entre eux se défend.** Une règle est une classe — elle porte quatre attributs d'identité et une méthode. Un extracteur est une simple fonction `Callable[[BinaryIO], str]`, parce qu'il n'a rien à porter : pas d'identifiant, pas de sévérité, pas de principe. Le registre des règles est une liste parcourue en entier à chaque analyse ; celui des extracteurs est un dictionnaire indexé par extension, puisqu'on en cherche exactement un. Même idée, deux formes que le besoin dicte.
 
+**Révisé le 22 septembre.** Les deux registres étaient d'abord remplis par un décorateur `@enregistrer` posé sur chaque classe ou fonction. Ils sont devenus des tables littérales, `REGLES` dans `rules/runner.py` et `REGISTRE` dans `extraction/registry.py` : le jeu de règles et de formats est petit et arrêté, la table se lit d'un coup d'œil, et l'import à effet de bord que le décorateur imposait a disparu. Ajouter un cas reste une classe (ou une fonction) et une ligne.
+
 ### D-3 — Ce que reçoit `check()`
 
 **Un objet `Document` maison**, portant le texte normalisé, ses paragraphes, ses phrases et ses tokens.
@@ -133,7 +136,7 @@ Le plan initial prévoyait d'ajouter à ce même objet un attribut `.spacy_doc` 
 ### D-5 et D-6 — L'objet `Finding`
 
 ```python
-@dataclass
+@dataclass(frozen=True)
 class Finding:
     rule_id: str          # "longueur_phrase"
     hint: str             # principe concerné
@@ -154,7 +157,7 @@ class Finding:
 
 - `repositories.py` — accès aux données, aucune linguistique.
 - `services/` — normalisation, segmentation, tokenisation, règles ; fonctions pures, testables sans base.
-- `services/linguistics.py` — **unique point de contact avec spaCy.** Aucune règle ne l'importe directement.
+- `services/ingestion/linguistics.py` — **unique point de contact avec spaCy.** Aucune règle ne l'importe directement.
 - `routes/` — minces.
 
 Argument de soutenance : le moteur de règles ne connaît pas la base de données, donc sa suite de tests s'exécute en isolation — et peut tourner en direct devant le jury.
@@ -165,7 +168,7 @@ Argument de soutenance : le moteur de règles ne connaît pas la base de donnée
 
 Un dossier se justifie quand il contiendra **au moins trois fichiers de même nature**. En dessous, un module suffit.
 
-D'où `repositories.py` en module unique, et `rules/fr.py` contenant les huit ou dix règles françaises plutôt que dix fichiers de quarante lignes. `extraction/` est un dossier parce que c'est là que le motif de registre se lit le mieux : un fichier par format. `models/` est devenu un dossier en application de la même règle : trois entités, trois fichiers.
+D'où `repositories.py` en module unique, et `rules/fr.py` contenant les huit ou dix règles françaises plutôt que dix fichiers de quarante lignes. `extraction/` est un dossier parce que c'est là que le motif de registre se lit le mieux : un fichier par format. `models/` est devenu un dossier en application de la même règle : trois entités, trois fichiers — puis un quatrième, `lexique.py`, qui réunit `WordList` et `WordEntry` parce qu'elles ne vont pas l'une sans l'autre.
 
 L'arborescence exacte est dans [setup-projet-vscode.md](setup-projet-vscode.md).
 
@@ -249,6 +252,8 @@ Cinq écrans, dont les deux premiers seuls sont indispensables :
 3. **Règles** — activation et seuils par langue. C'est le CRUD du projet, et il sert la démonstration : désactiver une règle, relancer, voir les signalements disparaître.
 4. **Listes de mots** — terme à éviter, formulation simple, catégorie.
 5. **Historique** — analyses précédentes, pour comparer une version révisée à la précédente.
+
+*État au 23 septembre, jour du gel :* les écrans 1, 2 et 4 existent, sans choix de langue ni de jeu de règles sur le premier. L'écran 5 existe en partie — *Analyses enregistrées* : on nomme une analyse, on la retrouve et on la relit à l'identique (D-16), sans comparaison entre versions. L'écran 3 n'est pas fait ; `run()` accepte déjà un ensemble de règles désactivées pour s'y brancher.
 
 ### Choix d'affichage
 

@@ -3,14 +3,13 @@
 {% block contenu %}
 <h1>Analyseur de langage clair</h1>
 
-
 <form method="post" enctype="multipart/form-data">
-  <textarea id="texte" name="texte" rows="8" maxlength="20000">{{ document.texte if document else '' }}</textarea>
+  <textarea id="texte" name="texte" rows="8" maxlength="{{ config.MAX_TEXT_LENGTH }}">{{ document.texte if document else '' }}</textarea>
 
   <p class="depot">
     <label for="fichier">ou déposer un fichier :</label>
     <input id="fichier" type="file" name="fichier" accept="{{ extensions | join(',') }}">
-    <span class="formats">{{ extensions | join(' · ') }} — 2 Mo maximum</span>
+    <span class="formats">{{ extensions | join(' · ') }} — {{ config.MAX_CONTENT_LENGTH // (1024 * 1024) }} Mo maximum</span>
   </p>
 
   <p><button type="submit">Analyser</button></p>
@@ -21,18 +20,28 @@
 {% endif %}
 
 {% if document %}
+  {% if analyse %}
+    <p class="formats">« {{ analyse.nom }} » — enregistrée le {{ analyse.cree_le.strftime('%d/%m/%Y') }}</p>
+  {% else %}
+    <form method="post" action="{{ url_for('analyze.enregistrer') }}" class="ajout">
+      <input type="hidden" name="texte" value="{{ document.texte }}">
+      {% if nom_fichier %}<input type="hidden" name="nom_fichier" value="{{ nom_fichier }}">{% endif %}
+      <input name="nom" placeholder="nom de l'analyse" maxlength="{{ nom_max }}" required>
+      <button type="submit">Enregistrer</button>
+    </form>
+  {% endif %}
+
   <div class="colonnes">
     <div class="texte">{{ texte_surligne }}</div>
 
     <div class="liste">
-            <h2>{{ findings | length }} signalement{{ 's' if findings | length > 1 else '' }}</h2>
+      <h2>{{ findings | length }} signalement{{ 's' if findings | length > 1 else '' }}</h2>
 
       <ul class="resume">
         {% for libelle, compte in resume %}
           <li><strong>{{ compte }}</strong> · {{ libelle }}</li>
         {% endfor %}
       </ul>
-
 
       {% if not findings %}
         <p class="vide">Aucun défaut détecté par les règles actives.</p>
@@ -52,7 +61,7 @@
   </div>
 
   <details>
-        <summary>Diagnostic technique — positions ({{ document.texte | length }} caractères,
+    <summary>Diagnostic technique — positions ({{ document.texte | length }} caractères,
       {{ document.paragraphes | length }} paragraphes,
       {{ document.phrases | length }} phrases,
       {{ document.tokens | length }} tokens)</summary>

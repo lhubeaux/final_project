@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block titre %}Analyses enregistrées — Analyseur de langage clair{% endblock %}
+
+{% block contenu %}
+<h1>Analyses enregistrées</h1>
+
+{% if not analyses %}
+  <p class="vide">Aucune analyse enregistrée. Analysez un texte, puis donnez-lui un nom.</p>
+{% else %}
+  <table>
+    <tr><th>Nom</th><th>Enregistrée le</th><th>Source</th></tr>
+    {% for analyse in analyses %}
+      <tr>
+        <td><a href="{{ url_for('analyze.relire', analysis_id=analyse.id) }}">{{ analyse.nom }}</a></td>
+        <td>{{ analyse.cree_le.strftime('%d/%m/%Y') }}</td>
+        <td>{{ analyse.document.nom_fichier or 'saisie' }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+{% endif %}
+{% endblock %}

@@ -3,7 +3,54 @@
 Aucune linguistique ici. Le repository ne décide rien, il range et relit.
 """
 
-from app.models import WordEntry, WordList, db
+from dataclasses import asdict
+from typing import TYPE_CHECKING
+
+from app.models import Analysis, DocumentRecord, FindingRecord, WordEntry, WordList, db
+
+if TYPE_CHECKING:      # import réel interdit : rules -> lexiques -> repositories ferait un cycle
+    from app.services.ingestion.document import Document
+    from app.services.rules.base import Finding
+
+
+def enregistrer_analyse(
+    nom: str,
+    document: "Document",
+    findings: list["Finding"],
+    nom_fichier: str | None = None,
+) -> int:
+    """Enregistre, sous un nom, le texte normalisé et ses signalements ; renvoie l'id.
+
+    Seule traduction Finding -> FindingRecord du projet (D-6). Les deux types ont
+    les mêmes champs, d'où `asdict`. Le HTML n'est jamais stocké : il se refait
+    à la lecture avec surligner().
+    """
+    analyse = Analysis(
+        nom=nom,
+        document=DocumentRecord(
+            texte=document.texte,
+            langue=document.langue,
+            source="fichier" if nom_fichier else "saisie",
+            nom_fichier=nom_fichier,
+        ),
+        findings=[FindingRecord(**asdict(finding)) for finding in findings],
+    )
+    db.session.add(analyse)
+    db.session.commit()
+    return analyse.id
+
+
+def toutes_les_analyses() -> list[Analysis]:
+    """Les analyses enregistrées, la plus récente d'abord."""
+    return list(
+        db.session.execute(
+            db.select(Analysis).order_by(Analysis.cree_le.desc())
+        ).scalars()
+    )
+
+
+def lire_analyse(analysis_id: int) -> Analysis | None:
+    return db.session.get(Analysis, analysis_id)
 
 
 def amorcer_liste(nom: str, langue: str, entrees: dict[str, str | None]) -> int:
@@ -43,7 +90,6 @@ def lire_liste(nom: str, langue: str) -> dict[str, str | None]:
     ).all()
     return dict(lignes)
 
-    
 
 def toutes_les_listes() -> list[WordList]:
     """Toutes les listes de mots, par nom puis par langue."""

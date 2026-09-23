@@ -1,83 +1,375 @@
-/* Feuille de style de l'analyseur — mode sombre.
+/* Feuille de style de l'analyseur — thème sombre.
 
-   Une ligne mark.r-<id> par règle d'analyse : sans elle le surlignage est
-   invisible, mark.signalement ne posant aucun fond. */
+   1. Couleurs
+   2. Base : page, champs, boutons, texte
+   3. Menu commun
+   4. Formulaire d'analyse et import de fichiers
+   5. Messages : erreur, succès
+   6. Résultats : deux colonnes et résumé
+   7. Surlignage — une règle mark.r-<id> par règle d'analyse
+   8. Fiches de signalement
+   9. Tableaux et diagnostic des positions
+  10. Formulaires en ligne et écran des listes
+  11. Petits écrans
 
-:root      { color-scheme: dark; }
-body      { font-family: system-ui, sans-serif; margin: 2rem; max-width: 72rem;
-            background: #16191d; color: #e4e4e4; }
-textarea  { width: 100%; font-family: inherit; background: #1e2228; color: #e4e4e4;
-            border: 1px solid #3a4048; border-radius: 4px; padding: .5rem; }
-button    { background: #2d3239; color: #e4e4e4; border: 1px solid #4a515a;
-            border-radius: 4px; padding: .4rem .9rem; cursor: pointer; }
-button:hover { background: #3a4048; }
-.colonnes { display: flex; gap: 1.5rem; align-items: flex-start; }
-.texte    { flex: 3; position: sticky; top: 1rem; max-height: calc(100vh - 2rem);
-            overflow-y: auto; background: #1e2228; padding: 1rem; white-space: pre-wrap;
-            line-height: 1.6; border-radius: 4px; }
-.liste    { flex: 2; min-width: 0; }
+   L'ordre compte à deux endroits : les mark.r-<id> viennent après
+   mark.signalement, et la section 11 vient après la section 6. */
 
-@media (max-width: 50rem) {
-  .colonnes { display: block; }
-  .texte    { position: static; max-height: none; margin-bottom: 1.5rem; }
+
+/* 1. Couleurs ------------------------------------------------------------ */
+
+:root {
+  color-scheme: dark;
+
+  --fond: #16191d;             /* la page */
+  --surface: #1e2228;          /* zones posées sur la page : texte, fiches, champs */
+  --texte: #e4e4e4;
+  --texte-doux: #9aa2ac;       /* libellés, résumé, menu inactif */
+  --bordure: #343a42;
+  --bordure-champ: #3a4048;
+  --bouton: #2d3239;
+  --bouton-bordure: #4a515a;
+  --accent: #7fb3ff;           /* élément actif : lien du menu, fiche choisie */
+  --vert: #4ec99a;
 }
-.resume   { list-style: none; padding: 0; margin: -.3rem 0 1rem;
-            color: #9aa2ac; font-size: .85rem; }
-.resume strong { color: #e4e4e4; font-variant-numeric: tabular-nums; }
-mark      { color: inherit; }
-mark.signalement            { background: none; cursor: pointer;}
-mark.r-longueur_phrase      { background: #007491; }
-mark.r-connecteurs_lourds   { text-decoration: underline wavy #e08a4a; }
-.fiche    { border: 1px solid #343a42; border-left: 4px solid #e0a800;
-            background: #1e2228; padding: .5rem .75rem; margin-bottom: .6rem;
-            cursor: pointer; transition: background .15s, border-color .15s; }
-.fiche h4 { margin: 0 0 .25rem; font-size: .95rem; }
-.principe { color: #9aa2ac; font-size: .85rem; }
-.vide     { color: #4ec99a; }
-details   { margin-top: 2rem; }
-table     { border-collapse: collapse; width: 100%; }
-th, td    { border: 1px solid #343a42; padding: .25rem .5rem; text-align: left;
-            vertical-align: top; }
-th        { background: #242930; }
-code      { font-family: ui-monospace, Consolas, monospace; }
-.pos      { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ko       { background: #5a1f24; color: #ffd7d7; font-weight: bold; }
-small     { color: #8d949d; font-variant-numeric: tabular-nums; }
-.tok      { display: inline-block; margin-right: .7rem; }
-.fiche.active  { border-left-color: #7fb3ff; background: #262f3a; }
-mark.active    { outline: 2px solid #e72dff; outline-offset: 1px; border-radius: 2px; }
-mark.r-passif {box-shadow: inset 0 -2px 0 #b88cff;}
 
-/* Import de fichiers. `.erreur` sert à tous les refus d'import : format
-   non pris en charge, fichier corrompu, encodage non reconnu. */
-.depot    { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem;
-            margin: .7rem 0; }
-.depot label { color: #9aa2ac; }
-input[type="file"] { color: #e4e4e4; font-family: inherit; }
+
+/* 2. Base ---------------------------------------------------------------- */
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 2rem;
+  max-width: 72rem;
+  background: var(--fond);
+  color: var(--texte);
+}
+
+textarea {
+  width: 100%;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--bordure-champ);
+  border-radius: 4px;
+  padding: .5rem;
+}
+
+button {
+  background: var(--bouton);
+  color: var(--texte);
+  border: 1px solid var(--bouton-bordure);
+  border-radius: 4px;
+  padding: .4rem .9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--bordure-champ);
+}
+
+code {
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+small {
+  color: #8d949d;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* 3. Menu commun --------------------------------------------------------- */
+
+.menu {
+  display: flex;
+  gap: 1.2rem;
+  margin: -1rem 0 1.5rem;
+  padding-bottom: .6rem;
+  border-bottom: 1px solid var(--bordure);
+}
+
+.menu a {
+  color: var(--texte-doux);
+  text-decoration: none;
+  padding-bottom: .2rem;
+}
+
+.menu a:hover {
+  color: var(--texte);
+}
+
+.menu a.actif {
+  color: var(--texte);
+  border-bottom: 2px solid var(--accent);
+}
+
+
+/* 4. Formulaire d'analyse et import de fichiers -------------------------- */
+
+.depot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .6rem;
+  margin: .7rem 0;
+}
+
+.depot label {
+  color: var(--texte-doux);
+}
+
+input[type="file"] {
+  color: var(--texte);
+  font-family: inherit;
+}
+
 input[type="file"]::file-selector-button {
-            background: #2d3239; color: #e4e4e4; border: 1px solid #4a515a;
-            border-radius: 4px; padding: .3rem .7rem; margin-right: .6rem;
-            cursor: pointer; font-family: inherit; }
-input[type="file"]::file-selector-button:hover { background: #3a4048; }
-.formats  { color: #6f7783; font-size: .85rem; }
-.erreur   { border: 1px solid #7a3b3b; border-left: 4px solid #e06c6c;
-            background: #2a1d1e; color: #ffd7d7; border-radius: 4px;
-            padding: .6rem .8rem; }
+  background: var(--bouton);
+  color: var(--texte);
+  border: 1px solid var(--bouton-bordure);
+  border-radius: 4px;
+  padding: .3rem .7rem;
+  margin-right: .6rem;
+  cursor: pointer;
+  font-family: inherit;
+}
 
-/* Menu commun et écran des listes de mots. `.succes` répond à `.erreur`. */
-.menu     { display: flex; gap: 1.2rem; margin: -1rem 0 1.5rem; padding-bottom: .6rem;
-            border-bottom: 1px solid #343a42; }
-.menu a   { color: #9aa2ac; text-decoration: none; padding-bottom: .2rem; }
-.menu a:hover  { color: #e4e4e4; }
-.menu a.actif  { color: #e4e4e4; border-bottom: 2px solid #7fb3ff; }
-.bloc-liste    { margin-bottom: 2.5rem; }
-.bloc-liste table { width: auto; min-width: min(28rem, 100%); }
-td.action      { width: 1%; white-space: nowrap; }
-td.action form { margin: 0; }
-button.discret { padding: .1rem .5rem; font-size: .85rem; color: #e6a3a3; }
-.ajout    { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
-.ajout input { background: #1e2228; color: #e4e4e4; border: 1px solid #3a4048;
-            border-radius: 4px; padding: .35rem .5rem; font-family: inherit; }
-.succes   { border: 1px solid #2f6b50; border-left: 4px solid #4ec99a;
-            background: #1b2a24; color: #d4f5e6; border-radius: 4px;
-            padding: .6rem .8rem; }
+input[type="file"]::file-selector-button:hover {
+  background: var(--bordure-champ);
+}
+
+/* Petit texte d'appoint : formats acceptés, date d'enregistrement, aide des listes. */
+.formats {
+  color: #6f7783;
+  font-size: .85rem;
+}
+
+
+/* 5. Messages ------------------------------------------------------------ */
+
+/* `.erreur` sert à tous les refus : import, texte vide ou trop long, nom manquant.
+   `.succes` lui répond, pour les messages flash. */
+.erreur {
+  border: 1px solid #7a3b3b;
+  border-left: 4px solid #e06c6c;
+  background: #2a1d1e;
+  color: #ffd7d7;
+  border-radius: 4px;
+  padding: .6rem .8rem;
+}
+
+.succes {
+  border: 1px solid #2f6b50;
+  border-left: 4px solid var(--vert);
+  background: #1b2a24;
+  color: #d4f5e6;
+  border-radius: 4px;
+  padding: .6rem .8rem;
+}
+
+
+/* 6. Résultats : deux colonnes et résumé --------------------------------- */
+
+.colonnes {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+/* Le texte reste visible pendant qu'on fait défiler les fiches. */
+.texte {
+  flex: 3;
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  background: var(--surface);
+  padding: 1rem;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  border-radius: 4px;
+}
+
+.liste {
+  flex: 2;
+  min-width: 0;
+}
+
+.resume {
+  list-style: none;
+  padding: 0;
+  margin: -.3rem 0 1rem;
+  color: var(--texte-doux);
+  font-size: .85rem;
+}
+
+.resume strong {
+  color: var(--texte);
+  font-variant-numeric: tabular-nums;
+}
+
+.vide {
+  color: var(--vert);
+}
+
+
+/* 7. Surlignage ---------------------------------------------------------- */
+
+/* mark.signalement ne pose aucun fond : sans sa ligne mark.r-<id>, une règle
+   serait invisible. Une forme par règle, pour que deux signalements
+   superposés restent lisibles tous les deux. */
+mark {
+  color: inherit;
+}
+
+mark.signalement {
+  background: none;
+  cursor: pointer;
+}
+
+mark.r-longueur_phrase {
+  background: #007491;                            /* bande de fond : toute la phrase */
+}
+
+mark.r-connecteurs_lourds {
+  text-decoration: underline wavy #e08a4a;        /* vague : une locution */
+}
+
+mark.r-passif {
+  box-shadow: inset 0 -2px 0 #b88cff;             /* trait bas : le groupe verbal */
+}
+
+mark.active {
+  outline: 2px solid #e72dff;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+
+/* 8. Fiches de signalement ----------------------------------------------- */
+
+.fiche {
+  border: 1px solid var(--bordure);
+  border-left: 4px solid #e0a800;
+  background: var(--surface);
+  padding: .5rem .75rem;
+  margin-bottom: .6rem;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+
+.fiche h4 {
+  margin: 0 0 .25rem;
+  font-size: .95rem;
+}
+
+.fiche.active {
+  border-left-color: var(--accent);
+  background: #262f3a;
+}
+
+.principe {
+  color: var(--texte-doux);
+  font-size: .85rem;
+}
+
+
+/* 9. Tableaux et diagnostic des positions -------------------------------- */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border: 1px solid var(--bordure);
+  padding: .25rem .5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #242930;
+}
+
+details {
+  margin-top: 2rem;
+}
+
+.pos {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tok {
+  display: inline-block;
+  margin-right: .7rem;
+}
+
+/* Un écart à l'invariant texte[start:end] == fragment.texte, en rouge. */
+.ko {
+  background: #5a1f24;
+  color: #ffd7d7;
+  font-weight: bold;
+}
+
+
+/* 10. Formulaires en ligne et écran des listes --------------------------- */
+
+/* Formulaire sur une ligne : ajout d'une entrée, enregistrement d'une analyse. */
+.ajout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: .6rem;
+}
+
+.ajout input {
+  background: var(--surface);
+  color: var(--texte);
+  border: 1px solid var(--bordure-champ);
+  border-radius: 4px;
+  padding: .35rem .5rem;
+  font-family: inherit;
+}
+
+.bloc-liste {
+  margin-bottom: 2.5rem;
+}
+
+.bloc-liste table {
+  width: auto;
+  min-width: min(28rem, 100%);
+}
+
+td.action {
+  width: 1%;
+  white-space: nowrap;
+}
+
+td.action form {
+  margin: 0;
+}
+
+button.discret {
+  padding: .1rem .5rem;
+  font-size: .85rem;
+  color: #e6a3a3;
+}
+
+
+/* 11. Petits écrans ------------------------------------------------------ */
+
+/* Une seule colonne, et le texte ne reste plus figé en haut de l'écran. */
+@media (max-width: 50rem) {
+  .colonnes {
+    display: block;
+  }
+
+  .texte {
+    position: static;
+    max-height: none;
+    margin-bottom: 1.5rem;
+  }
+}

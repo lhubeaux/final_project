@@ -4,7 +4,7 @@ Application web qui analyse un texte administratif ou institutionnel, signale ce
 
 L'outil s'appuie sur les dix principes de rédaction claire des institutions européennes — un référentiel publié et citable, plutôt que des critères inventés pour l'occasion.
 
-> **État : en développement.** Projet de fin de formation, réalisé sur trois semaines. La liste ci-dessous décrit la cible ; voir [Avancement](#avancement) pour ce qui fonctionne aujourd'hui, au 21 septembre 2026. L'écran des listes de mots existe ; la configuration des règles et l'historique, pas encore.
+> **État : fonctionnalités gelées le 23 septembre 2026**, avant la soutenance du 28. Projet de fin de formation, réalisé sur trois semaines. La liste ci-dessous décrit la cible ; voir [Avancement](#avancement) pour ce qui fonctionne aujourd'hui. L'écran des listes de mots et l'enregistrement des analyses existent ; la configuration des règles et l'export, non.
 
 ---
 
@@ -22,7 +22,7 @@ Ces défauts sont repérables automatiquement. C'est ce que fait cette applicati
 - **Suggestions de reformulation** lorsque la règle en propose une
 - **Configuration des règles** — activation, seuils par langue, jeux de règles multiples
 - **Listes de mots modifiables** — amorcées depuis des sources publiées, complétées par l'utilisateur
-- **Historique** des analyses, pour comparer une version révisée à la précédente
+- **Analyses enregistrées** à la demande, sous un nom, et relues à l'identique
 
 ### Ce qu'elle ne fait pas, délibérément
 
@@ -39,14 +39,16 @@ Ces défauts sont repérables automatiquement. C'est ce que fait cette applicati
 
 Deux idées structurent le code, et la seconde est la première appliquée une deuxième fois.
 
-**Un registre d'extracteurs.** Une interface commune — recevoir un flux binaire, renvoyer du texte brut — et une implémentation par format. Ajouter un format se réduit à une fonction et une ligne d'enregistrement : `@enregistrer(".rtf")`. Un extracteur ne normalise jamais le texte qu'il rend, faute de quoi les deux chemins d'entrée produiraient deux textes de référence différents.
+**Un registre d'extracteurs.** Une interface commune — recevoir un flux binaire, renvoyer du texte brut — et une implémentation par format. Ajouter un format se réduit à une fonction et une ligne dans la table `REGISTRE` : `".rtf": extraire_rtf`. Un extracteur ne normalise jamais le texte qu'il rend, faute de quoi les deux chemins d'entrée produiraient deux textes de référence différents.
 
-**Un registre de règles.** Chaque règle est une classe autonome exposant `check(document) -> list[Finding]`. L'exécutant filtre par langue et par configuration. Ajouter une règle ne touche à aucun code existant.
+**Un registre de règles.** Chaque règle est une classe autonome exposant `check(document) -> list[Finding]`. L'exécutant filtre par langue et par configuration. Ajouter une règle, c'est une classe et une ligne dans la liste `REGLES` : ni la route, ni l'affichage, ni l'exécutant ne changent.
+
+Les deux registres sont des tables écrites en clair plutôt qu'un enregistrement par décorateur : tout ce que le programme accepte et exécute se lit en quelques lignes, sans import à effet de bord.
 
 **Toutes les règles renvoient la même forme.** Quelle que soit leur granularité — une phrase entière, un token, un pourcentage — les règles produisent des `Finding` portant un empan de caractères. La couche d'affichage n'a donc qu'une seule forme à traiter, et ne change plus quand le jeu de règles s'étoffe.
 
 ```python
-@dataclass
+@dataclass(frozen=True)
 class Finding:
     rule_id: str          # "longueur_phrase"
     hint: str             # principe concerné
@@ -54,10 +56,10 @@ class Finding:
     char_start: int
     char_end: int
     message: str
-    suggestion: str | None
+    suggestion: str | None = None
 ```
 
-**spaCy est isolé derrière un seul fichier.** Aucune règle n'importe la bibliothèque directement : tout passe par `services/linguistics.py`. Changer de modèle, ou remplacer spaCy, ne concerne qu'un fichier.
+**spaCy est isolé derrière un seul fichier.** Aucune règle n'importe la bibliothèque directement : tout passe par `services/ingestion/linguistics.py`. Changer de modèle, ou remplacer spaCy, ne concerne qu'un fichier.
 
 ### Chaîne de traitement
 
@@ -75,19 +77,20 @@ La normalisation s'applique aux **deux** chemins d'entrée. Un copier-coller dep
 app/
 ├── __init__.py            fabrique d'application, route /health
 ├── config.py              configuration par variables d'environnement
-├── models/                DocumentRecord · Analysis · FindingRecord
+├── models/                DocumentRecord · Analysis · FindingRecord · WordList · WordEntry
 ├── repositories.py        accès aux données — tout le SQL, aucune linguistique
 ├── cli.py                 commande flask seed
-├── routes/                analyze (analyse) · admin (listes de mots)
-├── templates/ · static/   menu commun, page d'analyse, écran des listes, CSS, lien surlignage ↔ fiches
+├── routes/                analyze (analyse, analyses enregistrées) · admin (listes de mots)
+├── templates/ · static/   menu commun, page d'analyse, analyses enregistrées, listes, CSS, lien surlignage ↔ fiches
 └── services/
-    ├── document.py        build_document() — seul point d'entrée du moteur
-    ├── normalization.py   BOM, fins de ligne, NFC, apostrophes, insécables
-    ├── segmentation.py    paragraphes puis phrases (pysbd)
-    ├── tokenization.py    tokens avec positions absolues
-    ├── linguistics.py     unique point de contact avec spaCy
+    ├── ingestion/         texte brut -> Document
+    │   ├── document.py        build_document() — seul point d'entrée du moteur
+    │   ├── normalization.py   BOM, fins de ligne, NFC, apostrophes, insécables
+    │   ├── segmentation.py    paragraphes puis phrases (pysbd)
+    │   ├── tokenization.py    tokens avec positions absolues
+    │   └── linguistics.py     unique point de contact avec spaCy
     ├── rendering.py       échappement HTML puis surlignage
-    ├── extraction/        registry · txt · md · docx · odt
+    ├── extraction/        base · registry · txt · md · docx · odt
     └── rules/             base · runner · seuils · lexiques · fr · en
 data/seeds/                listes de mots versionnées, source de flask seed
 exemples/                  textes de démonstration, un par format
@@ -152,7 +155,7 @@ L'application répond sur http://127.0.0.1:5000.
 python -m pytest -p no:cacheprovider
 ```
 
-39 tests passent, plus un `xfail` assumé — le cas ambigu *La porte est ouverte*.
+48 tests passent, plus un `xfail` assumé — le cas ambigu *La porte est ouverte*.
 
 Les règles lisent leurs listes de mots en base : leurs tests tournent dans une application de test dont la base, en mémoire, est amorcée à chaque test. Aucun test n'a besoin de la base réelle ni d'un serveur.
 
@@ -190,7 +193,7 @@ Le passif **sans agent exprimé** est signalé plus sévèrement : le lecteur ne
 
 *Données quand c'est possible, code quand c'est nécessaire.*
 
-Les règles fondées sur des listes se portent vers une nouvelle langue par simple ajout d'un fichier de données. Les règles nécessitant une analyse grammaticale déclarent les langues qu'elles savent traiter et ne s'exécutent pas ailleurs. Les seuils sont définis par langue — une phrase française compte naturellement 15 à 20 % de mots de plus que son équivalent anglais, et un seuil unique produirait un biais systématique.
+Les règles fondées sur des listes se portent vers une nouvelle langue par simple ajout de données : une langue de plus dans `data/seeds/lexiques.json`, puis `flask seed`. Les règles nécessitant une analyse grammaticale déclarent les langues qu'elles savent traiter et ne s'exécutent pas ailleurs. Les seuils sont définis par langue — une phrase française compte naturellement 15 à 20 % de mots de plus que son équivalent anglais, et un seuil unique produirait un biais systématique.
 
 ---
 
@@ -216,14 +219,15 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - [ ] Tokenisation fine
 - [ ] Deux règles supplémentaires
 
-**Phase 3 — Finition** *(en cours, gel des fonctionnalités le 25/09 au soir)*
+**Phase 3 — Finition** *(fonctionnalités gelées le 23/09)*
 - [x] Documentation technique et guide des modules
 - [x] Durcissement : erreur 413, `MAX_TEXT_LENGTH` côté serveur, tests du parcours d'erreur
 - [x] Listes de mots en base, amorcées depuis un fichier versionné
-- [ ] Enregistrement des analyses
 - [x] Écran des listes de mots : afficher, ajouter, supprimer — effet dès l'analyse suivante
+- [x] Enregistrement des analyses à la demande, sous un nom ; liste et relecture à l'identique
+- [ ] Tests de la normalisation et de l'échappement HTML *(tests seulement, autorisés après le gel)*
 - [ ] Écran de configuration des règles
-- [ ] Historique, export, jeu de règles anglais
+- [ ] Export, jeu de règles anglais
 - [ ] Conteneurisation *(bonus — non attendue dans l'évaluation)*
 
 ## Limites connues
@@ -232,7 +236,7 @@ Projet mené en trois phases, chacune close par quelque chose qui fonctionne.
 - Les suggestions se copient mais ne s'appliquent pas automatiquement : corriger le texte invaliderait toutes les positions affichées et supposerait de relancer l'analyse.
 - *La porte est ouverte* et *Il est convaincu* peuvent être signalés comme passifs : l'analyse grammaticale ne tranche pas, le français ne distinguant pas formellement le passif d'état du passif d'action.
 - La tokenisation actuelle découpe sur les espaces : la ponctuation reste collée au mot.
-- Les analyses ne sont pas encore enregistrées en base.
+- Une analyse enregistrée garde le texte normalisé et les positions des signalements, jamais le HTML : le surlignage se refait à la relecture. Le résumé d'une analyse relue part des règles actives aujourd'hui.
 - L'écran des listes n'a ni protection CSRF ni authentification : l'application est pensée pour un usage local, par une seule personne.
 - Une entrée d'origine supprimée depuis l'écran revient au prochain `flask seed`, qui reprend les entrées manquantes du fichier d'amorce.
 - L'import ne lit que le corps du document : les tableaux d'un `.docx` sont ignorés, ainsi que les notes de bas de page.
@@ -247,4 +251,4 @@ Le dossier `docs/` rassemble la documentation technique, le guide des modules Py
 
 ## Licence
 
-[MIT](LICENSE). Les listes de mots et les jeux de règles sont couverts par la même licence ; leur origine est mentionnée avec le script d'amorce.
+[MIT](LICENSE). Les listes de mots (`data/seeds/lexiques.json`) et les jeux de règles sont couverts par la même licence.

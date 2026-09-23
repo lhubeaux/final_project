@@ -11,10 +11,6 @@ s'applique dès le texte suivant. Les listes d'origine viennent de
 manquantes, si bien qu'une entrée d'origine supprimée ici reviendra au prochain
 <code>flask seed</code>. Vos ajouts, eux, ne sont jamais touchés.</p>
 
-{% for categorie, message in get_flashed_messages(with_categories=true) %}
-  <p class="{{ categorie }}">{{ message }}</p>
-{% endfor %}
-
 {% for liste in listes %}
   {% set libelle, avec_remplacement = descriptions.get(liste.nom, (liste.nom, false)) %}
   <section class="bloc-liste" id="liste-{{ liste.id }}">

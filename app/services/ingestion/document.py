@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.services.normalization import normalize
-from app.services.segmentation import segment
-from app.services.tokenization import tokenize
-from app.services.linguistics import TokenLinguistique, analyser_phrases
+from app.services.ingestion.normalization import normalize
+from app.services.ingestion.segmentation import segment
+from app.services.ingestion.tokenization import tokenize
+from app.services.ingestion.linguistics import TokenLinguistique, analyser_phrases
 
 
 @dataclass(frozen=True) #frozen=True empêche de réassigner un span après le traitement
@@ -43,7 +43,7 @@ class Document:
     texte: str
     langue: str
     paragraphes: list[Paragraph]
-    spacy_doc: Any | None = field(default=None, compare=False)   # rempli en phase 2
+    spacy_doc: Any | None = field(default=None, compare=False)   # inutilisé : les règles lisent Sentence.analyse
 
     @property
     def phrases(self) -> list[Sentence]:

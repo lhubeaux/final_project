@@ -1,6 +1,6 @@
 # Soutenance — aide-mémoire
 
-Analyseur de langage clair. État au 21 septembre 2026, phase 3 en cours.
+Analyseur de langage clair. État au 23 septembre 2026 : fonctionnalités gelées, 48 tests.
 Documentation technique complète : `documentation.md` et `guide-des-modules-python.md`.
 
 ---
@@ -91,16 +91,17 @@ app/
 ├── models/                DocumentRecord, Analysis, FindingRecord, WordList, WordEntry
 ├── repositories.py        tout le SQL — aucune linguistique
 ├── cli.py                 flask seed : data/seeds/lexiques.json -> base
-├── routes/analyze.py      GET/POST /
+├── routes/analyze.py      GET/POST / ; /analyses/ : lister, enregistrer, relire
 ├── routes/admin.py        /listes/ : écran des listes de mots
 ├── static/                css/style.css · js/app.js
-├── templates/analyze/index.html
+├── templates/             base.html · analyze/index.html · analyze/analyses.html · admin/listes.html
 └── services/
-    ├── document.py        build_document() — le seul point d'entrée
-    ├── normalization.py · segmentation.py · tokenization.py
+    ├── ingestion/         texte brut -> Document
+    │   ├── document.py        build_document() — le seul point d'entrée
+    │   ├── normalization.py · segmentation.py · tokenization.py
+    │   └── linguistics.py     unique point de contact avec spaCy
     ├── rendering.py       surligner()
-    ├── linguistics.py     unique point de contact avec spaCy
-    ├── extraction/        registry · txt · md · docx · odt
+    ├── extraction/        base · registry · txt · md · docx · odt
     └── rules/
         ├── base.py        Finding (dataclass) + Rule (ABC)
         ├── runner.py      registre plat + run()
@@ -117,17 +118,19 @@ app/
 | D-4 | normaliser une seule fois, à l'entrée | une seule vérité de texte, donc des positions comparables partout |
 | D-5 | toute règle renvoie un `Finding` portant un empan | le surlignage est générique, il ne connaît aucune règle |
 | D-6 | `Finding` (transport) ≠ `FindingRecord` (persistance) | la dataclass ne traîne pas de session SQLAlchemy jusque dans le moteur |
-| D-7 | spaCy isolé derrière `services/linguistics.py` | changer de modèle ou s'en passer ne touche aucune règle |
-| D-8 | motif de registre, appliqué deux fois | ajouter une règle = une classe et un décorateur, zéro appelant modifié |
+| D-7 | spaCy isolé derrière `services/ingestion/linguistics.py` | changer de modèle ou s'en passer ne touche aucune règle |
+| D-8 | motif de registre, appliqué deux fois | ajouter une règle = une classe et une ligne dans `REGLES`, zéro appelant modifié |
 | D-10 | pas de score global | voir §1 |
 | D-11 | seuils définis par langue | 25 mots en français, 21 en anglais : la longueur moyenne n'est pas la même |
 | D-14 | passif = dépendances syntaxiques **+** heuristiques | mesuré : 2 formes sur 6 détectées avec `fr_core_news_sm` seul |
+| D-16 | enregistrer le texte normalisé et les empans, jamais le HTML | une seule vérité ; le surlignage se refait, `normalize()` étant idempotente |
 
 ---
 
 ## 5. Le moteur de règles
 
-Trois fichiers de code, plus deux fichiers de données (`seuils.py`, `lexiques.py`).
+Trois fichiers de code, plus deux modules qui fournissent les données : `seuils.py`
+(un tableau en dur) et `lexiques.py` (qui lit les listes de mots en base).
 
 - **`base.py`** — `Finding`, dataclass gelée, et `Rule`, classe abstraite. Une règle
   concrète redéfinit `id`, `hint`, `severity`, puis implémente `check(document)`.
@@ -151,8 +154,8 @@ def s_applique_a(self, langue: str) -> bool:
     return bool(connecteurs_lourds(langue))          # ConnecteursLourds
 ```
 
-Conséquence : ajouter une langue, c'est ajouter une entrée dans `seuils.py` ou
-`lexiques.py`. Aucune ligne de code ne change. **C'est ce qui rend l'extension aux
+Conséquence : ajouter une langue, c'est ajouter une entrée dans `seuils.py`, ou une
+langue dans `data/seeds/lexiques.json` suivie de `flask seed`. Aucune ligne de code ne change. **C'est ce qui rend l'extension aux
 24 langues de l'UE possible sans refonte.**
 
 ### Les trois règles livrées
@@ -199,7 +202,7 @@ Ce qu'il faut faire remarquer :
 2. **Paragraphe 2** — trois phrases courtes, aucun signalement de longueur. Il montre
    les tolérances du motif : élision (*Afin d'*, *au titre d'une*), majuscule de début
    de phrase, et la double espace de « S'agissant  de » que seul le `\s+` rattrape.
-3. **Le volet « Structure du texte »** — le tableau de diagnostic affiche
+3. **Le volet replié « Diagnostic technique — positions »** — le tableau de diagnostic affiche
    `texte[start:end]` à côté de chaque fragment. C'est l'invariant, visible à l'œil nu.
 
 Puis, pour le passif — le moment fort :
@@ -211,7 +214,8 @@ Elle est allée à Paris.                   -> rien : « aller » se conjugue av
 ```
 
 Une regex `être + participe` signalerait les trois ; l'analyse en dépendances et
-l'heuristique les distinguent. Annoncer le chiffre : 2 sur 6 avec les dépendances seules.
+l'heuristique les distinguent. Annoncer le chiffre : 2 sur 6 avec les dépendances seules,
+4 sur 6 avec les heuristiques.
 
 Puis l'écran des listes — la démonstration que les données pilotent les règles :
 
@@ -222,6 +226,16 @@ Puis l'écran des listes — la démonstration que les données pilotent les rè
 Aucun redémarrage : les règles relisent la base à chaque analyse. Faire remarquer
 que la saisie est passée par `normalize()` — c'est l'invariant de D-4 appliqué à
 l'autre bout.
+
+Puis l'enregistrement — la démonstration que la base garde de quoi refaire le résultat :
+
+1. Sous un résultat, donner un nom (« Notification juin ») et cliquer *Enregistrer*.
+2. La page redirige vers l'analyse enregistrée, avec le message de confirmation.
+3. Menu → *Analyses enregistrées* : elle y figure, avec sa date et sa source. La rouvrir :
+   le surlignage est identique.
+
+Faire remarquer que la base ne contient **aucun HTML** : le texte normalisé et les
+empans suffisent, `surligner()` refait le reste.
 
 Puis l'import, avec les fichiers de `exemples/` — le même texte dans les quatre
 formats :
@@ -309,6 +323,22 @@ formulaire avec son bandeau d'erreur — en conservant le code 413, parce que ri
 été analysé. Le rendu est partagé par une fonction `page()` : une page d'erreur reste
 une page d'analyse.
 
+**« Pourquoi ne pas enregistrer directement le HTML surligné ? »**
+Parce que ce serait une seconde vérité, qui peut diverger des empans. Le relire obligerait
+à le marquer sûr avec `Markup` : une ligne modifiée dans la base deviendrait une faille XSS.
+Et les anciennes analyses resteraient figées dans les classes CSS du jour. On enregistre le
+texte normalisé et les empans (D-16) ; `surligner()` refait le HTML à la relecture.
+
+**« Comment être sûr que les positions relues sont les bonnes ? »**
+Parce que `normalize()` est idempotente : normaliser un texte déjà normalisé ne le change
+pas. La relecture repasse par `build_document()`, retrouve le même texte, donc les mêmes
+positions. Un test le garde, et un autre vérifie que les `\r\n` renvoyés par le navigateur
+ne décalent rien.
+
+**« Le formulaire d'enregistrement renvoie-t-il les signalements ? »**
+Non, seulement le texte. On ne se fie jamais à des positions venues du navigateur : la route
+relance l'analyse et enregistre ce que le serveur a calculé.
+
 **« Pourquoi un extracteur est-il une fonction, alors qu'une règle est une classe ? »**
 Parce qu'un extracteur n'a rien à porter : pas d'identifiant, pas de sévérité, pas de
 principe de rattachement. Une règle porte les quatre, et le gabarit les affiche. Le
@@ -340,7 +370,10 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
 - La tokenisation est un simple `\S+` : la ponctuation reste collée au mot. Suffisant
   pour compter des mots ; la tokenisation fine reste à faire.
 - Le lexique compte seize entrées. C'est un échantillon représentatif, pas un inventaire.
-- Un seul texte à la fois, pas d'historique, pas d'export : phase 3.
+- Un seul texte à la fois, pas d'export, pas de comparaison entre deux versions d'un texte.
+- Enregistrer relance les règles : si une liste de mots change entre l'affichage et le clic,
+  les signalements enregistrés diffèrent de ceux affichés. Le résumé d'une analyse relue part
+  des règles actives aujourd'hui.
 - Sur une base migrée mais non amorcée, rien ne plante : la règle des connecteurs
   disparaît et le passif perd son exclusion des verbes avec *être*. Une liste absente
   donne un dict vide — c'est voulu pour une langue non couverte, et c'est le revers du
@@ -351,7 +384,8 @@ surlignage. Mieux vaut refuser que signaler au mauvais endroit (D-2).
   marquer l'entrée supprimée au lieu de l'effacer — demande une colonne et une migration.
 - L'import lit le corps du document : les tableaux d'un `.docx` et les notes de bas de page sont ignorés.
 - Le choix de l'extracteur se fait sur l'extension, pas sur les octets d'en-tête. Un `.pdf` renommé en `.docx` est refusé par python-docx, donc avec le bon résultat mais pour la mauvaise raison.
-- Les analyses ne sont pas encore enregistrées en base ; les tables et la migration existent.
+- Pas d'écran de configuration des règles : `run()` accepte déjà un ensemble de règles
+  désactivées, l'écran s'y branchera.
 - « La porte est ouverte » et « Il est convaincu » restent signalés : la frontière entre état et passif est ambiguë. Le premier cas est documenté par un test `xfail`. Score : 4 sur 6 sur les phrases de référence, contre 2 sur 6 avec les dépendances seules.
 - Les attributs adjectivaux (« est susceptible de ») ne sont plus signalés depuis le 15/09 : la règle exige un participe étiqueté `VERB`.
 

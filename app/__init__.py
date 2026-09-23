@@ -22,7 +22,6 @@ def create_app(config_class=Config):
 
     app.cli.add_command(seed)
 
-
     @app.get("/health")
     def health():
         return {"status": "ok"}

@@ -33,9 +33,9 @@ C'est le contrat minimum. Tout le reste est négociable.
 | lun 07/09 | **Phase 0** — socle *(fait)* |
 | lun 07 → ven 11/09 | **Phase 1** — la chaîne complète, en version minimale |
 | lun 14 → ven 18/09 | **Phase 2** — ce qui rend le projet intéressant *(close)* |
-| lun 21 → ven 25/09 | **Phase 3** — rendre présentable *(en cours)* |
-| **ven 25/09 au soir** | **Gel des fonctionnalités** *(repoussé d'un jour le 21/09)* |
-| sam 26 → dim 27/09 | Répétition de la soutenance |
+| lun 21 → mer 23/09 | **Phase 3** — rendre présentable *(close)* |
+| **mer 23/09** | **Gel des fonctionnalités** *(avancé de deux jours ; prévu le ven 25 au soir)* |
+| jeu 24 → dim 27/09 | Tests manquants, documentation, répétition de la soutenance |
 | **lun 28/09** | Livraison |
 
 Quinze jours ouvrés. Le plan ne suppose plus six heures productives par jour — il suppose seulement que **chaque phase se termine par quelque chose qui marche**. Si une phase déborde, ce n'est pas la suivante qui recule : c'est du contenu qu'on retire à l'intérieur de la phase (voir *Ce qu'on coupe*).
@@ -52,7 +52,7 @@ Ils comptent davantage que le détail des tâches.
 
 **3. La dépendance la plus lourde arrive en second.** spaCy n'entre en jeu qu'en phase 2, une fois l'application déjà fonctionnelle. *(Le risque d'installation, lui, est déjà écarté : le modèle `fr_core_news_sm` 3.8.0 est installé et vérifié — voir le setup.)*
 
-**4. Gel des fonctionnalités le 25 septembre au soir.** Passé cette date : correction, documentation, répétition. Aucune fonctionnalité nouvelle, quelle que soit la tentation. C'est la décision qui protège le plus efficacement une soutenance, et celle qu'on regrette toujours de ne pas avoir prise.
+**4. Gel des fonctionnalités le 25 septembre au soir** — *prononcé finalement le mercredi 23*. Passé cette date : correction, documentation, répétition. Aucune fonctionnalité nouvelle, quelle que soit la tentation. C'est la décision qui protège le plus efficacement une soutenance, et celle qu'on regrette toujours de ne pas avoir prise.
 
 ---
 
@@ -76,11 +76,11 @@ Détail et état exact dans [setup-projet-vscode.md](setup-projet-vscode.md).
 
 **Modèle de données — trois entités seulement.** ✅ `DocumentRecord`, `Analysis`, `FindingRecord`, et leur migration (`app/models/`). Les quatre autres (`RuleSet`, `RuleConfig`, `WordList`, `WordEntry`) attendent la phase 2 : tant qu'il n'y a pas d'écran de configuration, elles ne servent à rien. Les listes de mots se lisent directement depuis les fichiers JSON de `data/seeds/`. *(Révisé le 21/09 : `WordList` et `WordEntry` sont arrivés sans écran de configuration — `data/seeds/lexiques.json` reste la source versionnée, et `flask seed` la charge en base.)*
 
-**Normalisation.** ✅ Un seul service : NFC, apostrophes, espaces insécables, conservation des sauts de paragraphe. (`app/services/normalization.py`)
+**Normalisation.** ✅ Un seul service : NFC, apostrophes, espaces insécables, conservation des sauts de paragraphe. (`app/services/ingestion/normalization.py`)
 
-**Segmentation.** ✅ Découpage en phrases avec `pysbd`, sans franchir les frontières de paragraphe. (`app/services/segmentation.py`)
+**Segmentation.** ✅ Découpage en phrases avec `pysbd`, sans franchir les frontières de paragraphe. (`app/services/ingestion/segmentation.py`)
 
-**Tokenisation grossière.** ✅ Découpage sur les espaces (`\S+` via `re.finditer`), avec positions char_start/char_end. (`app/services/tokenization.py`)
+**Tokenisation grossière.** ✅ Découpage sur les espaces (`\S+` via `re.finditer`), avec positions char_start/char_end. (`app/services/ingestion/tokenization.py`)
 
 **Route d'analyse.** ✅ `POST /` appelle `build_document(texte_brut, langue="fr")`, exécute les règles et transmet le texte surligné au template. (`app/routes/analyze.py`)
 
@@ -120,7 +120,7 @@ L'import de fichiers. Une zone de texte suffit à boucler la chaîne, et l'extra
 
 *Points 4 à 6 non réalisés : tokenisation fine, deux règles de plus, script d'amorce. Ils entrent dans l'ordre de sacrifice.*
 
-- Chargement du modèle **une seule fois** au démarrage, derrière `services/linguistics.py`.
+- Chargement du modèle **une seule fois** au démarrage, derrière `services/ingestion/linguistics.py`.
 - **Le jeu d'essai d'abord, la règle ensuite.** Une vingtaine de phrases : passifs véritables, et faux positifs classiques (*elle est allée*, *la porte est ouverte*, *il est convaincu*).
 - Détection par `aux:pass` / `nsubj:pass`, **plus heuristiques**.
 
@@ -146,7 +146,7 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 
 ## Phase 3 — Rendre présentable
 
-**→ vendredi 25 septembre au soir — en cours depuis le lundi 21.**
+**→ vendredi 25 septembre au soir — close le mercredi 23, jour du gel.**
 
 **Fin de phase :** un jury peut manipuler l'application sans la casser, et le dépôt se lit tout seul.
 
@@ -159,6 +159,10 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 > Le prix de ce choix est à connaître : le gel repoussé prend le vendredi qui était réservé à la répétition. Il reste le week-end.
 >
 > **Fait le 21/09 :** les connecteurs lourds et les verbes conjugués avec *être* sont en base — tables `word_lists` et `word_entries`, amorce `flask seed` depuis `data/seeds/lexiques.json`, `lexiques.py` qui lit la base. Même jour : l'écran d'édition des listes (`/listes/`) et le menu commun. Reste l'enregistrement des analyses, prévu le 22/09.
+>
+> **Au 23/09.** Le 22 est allé à une simplification : les deux registres sont devenus des tables littérales, sans décorateur, et les 39 tests passent à l'identique.
+>
+> **Le 23/09, gel.** L'enregistrement des analyses est fait dans la journée : à la demande, sous un nom, avec une liste et une relecture à l'identique (D-16). La mise en forme est revue — `style.css` réorganisé, lignes vides et indentation. 48 tests passent. **Les fonctionnalités sont gelées le soir même**, deux jours avant la date prévue ; la quatrième règle est abandonnée. Restent `tests/test_normalization.py` et un test d'échappement — l'échappement lui-même a été vérifié à la main — puis la répétition, qui retrouve les quatre jours qu'elle avait perdus.
 
 ### Contenu
 
@@ -181,9 +185,9 @@ Coupe dans l'ordre inverse : d'abord le script d'amorce (les listes se saisissen
 
 ## Gel, répétition, livraison
 
-**Vendredi 25/09 au soir : gel.** Plus aucune fonctionnalité.
+**Mercredi 23/09 : gel**, avancé de deux jours. Plus aucune fonctionnalité.
 
-**Samedi 26 et dimanche 27/09 : répétition.** Ces deux journées ne sont pas du confort, ce sont les plus rentables des trois semaines — et depuis que le gel a été repoussé, il n'y en a plus que deux.
+**Jeudi 24 → dimanche 27/09 : tests manquants et répétition.** Ces journées ne sont pas du confort, ce sont les plus rentables des trois semaines — et le gel avancé en rend quatre au lieu de deux.
 
 - Préparer deux ou trois textes de démonstration, dont un déjà chargé au démarrage.
 - Répéter **à voix haute, chronomètre en main, au moins deux fois.**
@@ -238,4 +242,4 @@ Trois moments où l'on s'arrête pour constater, honnêtement, où l'on en est.
 |---|---|---|
 | **ven 11/09** | Est-ce que je colle un texte et vois des signalements surlignés ? | Retirer des règles jusqu'à ce que oui, avant de toucher à spaCy. |
 | **ven 18/09** | Est-ce que la détection du passif distingue *la décision a été prise* de *elle est allée à Paris* ? | ✅ **Oui.** 4 sur 6 sur les phrases de référence, contre 2 sur 6 avec les dépendances seules ; les deux échecs sont documentés, dont un en `xfail`. |
-| **ven 25/09** | Est-ce qu'un inconnu peut manipuler l'application dix minutes sans la casser ? | Geler quand même et corriger. Le gel n'est pas négociable. |
+| **ven 25/09** | Est-ce qu'un inconnu peut manipuler l'application dix minutes sans la casser ? | Geler quand même et corriger. Le gel n'est pas négociable. *(Gel prononcé dès le 23/09 ; la question reste à poser pendant la répétition.)* |

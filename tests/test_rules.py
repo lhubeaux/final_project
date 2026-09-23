@@ -7,7 +7,7 @@ Aucun `client` en revanche — on ne passe pas par la route.
 
 import pytest
 
-from app.services.document import build_document
+from app.services.ingestion.document import build_document
 from app.services.rules import regles, run
 from app.services.rules.fr import ConnecteursLourds, LongueurPhrase
 

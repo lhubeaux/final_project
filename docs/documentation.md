@@ -1,6 +1,6 @@
 # Analyseur de langage clair — documentation technique
 
-État au 21 septembre 2026, phase 3 en cours.
+État au 23 septembre 2026 : fonctionnalités gelées, soutenance le 28.
 Document de référence : ce que le code fait aujourd'hui, et pourquoi il le fait ainsi.
 Pour l'oral, voir plutôt `soutenance.md`, qui est un aide-mémoire de questions-réponses.
 
@@ -53,22 +53,23 @@ app/
 ├── __init__.py            fabrique create_app()
 ├── config.py              Config / TestConfig, lues depuis l'environnement
 ├── models/                DocumentRecord · Analysis · FindingRecord · WordList · WordEntry
-├── repositories.py        tout le SQL : amorcer_liste(), lire_liste()
+├── repositories.py        tout le SQL : listes de mots, analyses enregistrées
 ├── cli.py                 flask seed : data/seeds/lexiques.json -> base
 ├── routes/
-│   ├── analyze.py         GET/POST /
+│   ├── analyze.py         GET/POST / ; /analyses/ : lister, enregistrer, relire
 │   └── admin.py           /listes/ : écran des listes de mots
 ├── static/
-│   ├── css/style.css      feuille unique, mode sombre
+│   ├── css/style.css      feuille unique, mode sombre, onze sections numérotées
 │   └── js/app.js          lien surlignage ↔ fiche
-├── templates/analyze/index.html
+├── templates/             base.html (menu, flash) · analyze/index.html · analyze/analyses.html · admin/listes.html
 └── services/
-    ├── document.py        build_document() — le seul point d'entrée
-    ├── normalization.py   six transformations, une seule fois
-    ├── segmentation.py    paragraphes puis phrases (pysbd)
-    ├── tokenization.py    \S+ avec report de position
+    ├── ingestion/         texte brut -> Document
+    │   ├── document.py        build_document() — le seul point d'entrée
+    │   ├── normalization.py   six transformations, une seule fois
+    │   ├── segmentation.py    paragraphes puis phrases (pysbd)
+    │   ├── tokenization.py    \S+ avec report de position
+    │   └── linguistics.py     point de contact unique avec spaCy, TokenLinguistique
     ├── rendering.py       surligner() — échappement puis balisage
-    ├── linguistics.py     point de contact unique avec spaCy, TokenLinguistique
     ├── extraction/
     │   ├── base.py        Extracteur (type) + erreurs d'import
     │   ├── registry.py    REGISTRE, extraire(), extensions_supportees()
@@ -96,7 +97,7 @@ Le détail de chaque module est dans `guide-des-modules-python.md`.
    `test_passif.py` tournent dans une application de test, base en mémoire amorcée.
 2. **Le repository ne fait pas de linguistique.** Il traduit des objets en lignes de
    table, rien de plus. Tout le SQL du projet est là.
-3. **Aucune règle n'importe spaCy** (D-7). Seul `services/linguistics.py` l'importe ; il
+3. **Aucune règle n'importe spaCy** (D-7). Seul `services/ingestion/linguistics.py` l'importe ; il
    traduit chaque token en `TokenLinguistique`, et les règles lisent `Sentence.analyse`.
 
 ---
@@ -226,8 +227,8 @@ ailleurs dans l'application est sa ligne de couleur dans `style.css`.
 
 ### Les langues, et l'extension aux 24 langues de l'UE
 
-Le registre est plat : une fois `fr.py` et `en.py` importés, plus rien ne dit d'où vient
-une règle. `Rule.s_applique_a(langue)` porte donc l'information. Les deux règles fondées
+Le registre est plat : une fois les règles rassemblées dans `REGLES`, plus rien ne dit
+d'où vient une règle. `Rule.s_applique_a(langue)` porte donc l'information. Les deux règles fondées
 sur des données ne déclarent aucune liste de langues, elles la déduisent de leur donnée :
 
 ```python
@@ -286,41 +287,59 @@ configuration des règles.
 | Table | Rôle | Points notables |
 |---|---|---|
 | `documents` | un texte soumis | `texte` est le texte **normalisé** ; `source` vaut `saisie` ou `fichier` ; `version_tokeniseur` prépare la commande `retokenize` |
-| `analyses` | une exécution du moteur sur un document | horodatée ; un document peut en avoir plusieurs |
+| `analyses` | une analyse que l'utilisateur a choisi d'enregistrer | `nom` obligatoire, donné à l'enregistrement ; horodatée en UTC |
 | `findings` | un signalement persisté | reflet de la dataclass `Finding`, mêmes champs, nom distinct (D-6) |
 | `word_lists` | une liste de mots nommée, pour une langue | unique sur (`nom`, `langue`) : `connecteurs_lourds` / `fr` |
 | `word_entries` | une entrée de liste | unique dans sa liste ; `remplacement` vide pour les verbes, qui n'ont pas de reformulation |
 
-Deux migrations : les trois premières tables (`7b70f94273c6`), puis les listes de mots
-(`346c000e5787`).
+Trois migrations : les trois premières tables (`7b70f94273c6`), les listes de mots
+(`346c000e5787`), puis le nom des analyses (`1436e85304b1`). Cette dernière ajoute une
+colonne obligatoire à une table qui contenait déjà une ligne : sans
+`server_default='Sans nom'`, `flask db upgrade` échouait sur `NOT NULL`.
 
 **Les listes de mots sont remplies par `flask seed`.** La source versionnée reste
 `data/seeds/lexiques.json` (D-12) ; la base n'en est que la copie d'exécution.
 `amorcer_liste()` n'ajoute que les entrées absentes et n'écrase jamais rien : relancer
 l'amorce est sans risque, y compris depuis que les listes sont éditables à l'écran.
 
-**Les trois premières tables restent vides** : la route n'enregistre pas encore les
-analyses.
+**Les analyses s'enregistrent à la demande, sous un nom** (23 septembre). Cliquer sur
+*Analyser* n'écrit rien ; c'est le bouton *Enregistrer*, sous le résultat, qui le fait.
+La route appelle `repositories.enregistrer_analyse(nom, document, findings,
+nom_fichier=...)`, jamais `db.session` : c'est là, et nulle part ailleurs, que se fait la
+traduction `Finding` → `FindingRecord`, en une ligne — `FindingRecord(**asdict(finding))`,
+possible parce que les deux types ont les mêmes champs (D-6).
 
-Quand ce sera branché : la route appellera `repositories.enregistrer_analyse(...)`, jamais
-`db.session` directement, et c'est là — et nulle part ailleurs — que se fera la traduction
-`Finding` → `FindingRecord`.
+**On enregistre de quoi refaire le surlignage, jamais le HTML** (D-16). Le document
+enregistré est le texte normalisé ; les signalements, leurs empans. À la relecture,
+`build_document(texte, langue=...)` reconstruit le `Document` et `surligner()` refait le
+HTML. Stocker le HTML ferait deux vérités, obligerait à le marquer sûr en le relisant —
+une faille XSS si la base est modifiée à la main — et figerait l'affichage des anciennes
+analyses dans les classes CSS du jour.
+
+Cela ne tient que parce que `normalize()` est **idempotente** : normaliser un texte déjà
+normalisé ne le change pas, donc les empans enregistrés restent valides. Un test le garde.
+
+L'ordre des signalements relus est fixé par `order_by="FindingRecord.id"` sur la
+relation : l'ordre d'insertion est celui de `run()`, et les rangs de `data-findings`
+doivent correspondre aux fiches.
 
 ---
 
 ## 7. L'interface
 
-Deux pages, reliées par un menu commun. `templates/base.html` porte l'en-tête, la
-feuille de style et le menu ; `analyze/index.html` et `admin/listes.html` en héritent
-par `{% extends %}`. Le lien de la page courante reçoit la classe `actif` d'après
-`request.blueprint`.
+Trois écrans, reliés par un menu commun : *Analyse*, *Analyses enregistrées*, *Listes
+de mots*. `templates/base.html` porte l'en-tête, la feuille de style, le menu et les
+messages `flash` ; les autres gabarits en héritent par `{% extends %}`. Le lien de la
+page courante reçoit la classe `actif` d'après `request.endpoint` — `request.blueprint`
+ne suffit plus, deux liens appartenant au blueprint `analyze`.
 
 ### La page d'analyse
 
 `templates/analyze/index.html`, servie en `GET` et en `POST`.
 
-- **Le formulaire** — une `textarea`, `maxlength="20000"`, et un champ de dépôt de
-  fichier. L'attribut `accept` et la liste des formats affichée sont tous deux produits
+- **Le formulaire** — une `textarea` et un champ de dépôt de fichier. `maxlength` et le
+  plafond affiché en Mo sont lus dans `config` (`MAX_TEXT_LENGTH`, `MAX_CONTENT_LENGTH`) :
+  changer `.env` met la page à jour, rien n'est écrit en dur. L'attribut `accept` et la liste des formats affichée sont tous deux produits
   par `extensions_supportees()` : ajouter un extracteur suffit à les mettre
   à jour. Après analyse, la zone réaffiche `document.texte`, c'est-à-dire le texte
   **normalisé** : l'utilisateur récupère ses apostrophes redressées. C'est cohérent
@@ -328,9 +347,14 @@ par `{% extends %}`. Le lien de la page courante reçoit la classe `actif` d'apr
 - **Le bandeau d'erreur** — un `<p class="erreur">` au-dessus des résultats, alimenté
   par le message de l'`ExtractionError`, par le dépassement de `MAX_TEXT_LENGTH`, ou
   par « Aucun texte à analyser. » quand la saisie est vide.
-- **Un rendu unique** — `page()` dans `routes/analyze.py`. La route et le gestionnaire
-  d'erreur y passent tous deux, si bien qu'une page d'erreur reste une page d'analyse :
-  le formulaire est toujours là, la liste des formats aussi.
+- **Un rendu unique** — `page()` dans `routes/analyze.py`. Toutes les routes et le
+  gestionnaire d'erreur y passent, si bien qu'une page d'erreur reste une page
+  d'analyse : le formulaire est toujours là, la liste des formats aussi. `page()`
+  calcule elle-même le surlignage et le résumé à partir du document et des findings :
+  ils ne sont écrits qu'à un endroit.
+- **Le formulaire d'enregistrement** — sous le résultat, un champ *nom* et un bouton
+  *Enregistrer*. Il renvoie le texte normalisé dans un champ caché, et le nom du fichier
+  importé s'il y en a un. Sur une analyse relue, il est remplacé par son nom et sa date.
 - **Colonne de gauche** — le texte surligné. Chaque `<mark>` porte ses classes
   (`signalement r-longueur_phrase`) et un `data-findings="0,3"` listant les rangs des
   signalements qui le couvrent.
@@ -342,6 +366,29 @@ par `{% extends %}`. Le lien de la page courante reçoit la classe `actif` d'apr
 - **En bas, replié** — le diagnostic technique des positions : pour chaque phrase, son
   `start`, son `end`, ce qu'elle transporte et `texte[start:end]` recalculé, en rouge en
   cas d'écart. C'est un outil de vérification, pas une fonctionnalité.
+
+### Les analyses enregistrées
+
+`templates/analyze/analyses.html`, sous `/analyses/`, et trois routes de `analyze.py` :
+
+| Route | Rôle |
+|---|---|
+| `GET /analyses/` | la liste : nom, date, fichier d'origine ou « saisie », la plus récente d'abord |
+| `POST /analyses/` | `enregistrer()` : nettoie le nom, relance l'analyse, enregistre, redirige |
+| `GET /analyses/<id>` | `relire()` : reconstruit le document, refait le surlignage, sans relancer les règles |
+
+- **On ne se fie jamais à des empans venus du navigateur.** Le formulaire renvoie le
+  texte, pas les signalements : `enregistrer()` relance `build_document()` puis `run()`.
+  Les empans enregistrés sont donc calculés par le serveur.
+- **Les CRLF du navigateur.** Un navigateur renvoie les retours à la ligne d'un champ en
+  `\r\n`. `normalize()` les ramène à `\n` : le texte, donc chaque empan, est celui qui
+  était affiché. Un test l'exerce.
+- **Refus** : un nom vide ou de plus de 100 caractères (`NOM_MAX`) réaffiche l'analyse
+  avec un bandeau d'erreur ; un champ caché vide ou trop long répond 400, ce n'est pas
+  un parcours utilisateur.
+- **POST-Redirect-GET** vers `/analyses/<id>`, avec un message `flash` : rafraîchir la
+  page ne crée pas de doublon.
+- **La date seule** est affichée : `cree_le` est en UTC, une heure aurait 2 h de retard.
 
 ### L'écran des listes de mots
 
@@ -384,6 +431,7 @@ mot par `re.escape` : aucune injection de motif n'est possible.
 | `test_smoke.py` | la route `/health` répond |
 | `test_admin.py` | l'écran des listes, par la route : affichage et menu, ajout pris en compte dès l'analyse suivante, redirection POST-Redirect-GET, saisie normalisée (apostrophe courbe), doublon refusé même en majuscules, remplacement obligatoire, expression vide, verbe sans remplacement, suppression prise en compte, 404 sur un identifiant inconnu |
 | `test_validation.py` | le parcours d'erreur, vu depuis la route : dépassement de 2 Mo (413), texte trop long, texte vide, refus `.pdf` et `.doc` avec leur raison, extension inconnue, `.docx` corrompu, `.txt` en cp1252 décodé, et la priorité du fichier sur la zone de texte |
+| `test_historique.py` | l'enregistrement des analyses : *Analyser* n'écrit rien, le formulaire est proposé, POST-Redirect-GET, relecture au HTML identique, CRLF renvoyés par le navigateur sans décalage, liste avec nom et fichier, nom vide refusé, 404, et l'idempotence de `normalize()` |
 | `test_passif.py` | les passifs avec ou sans agent (empan et sévérité), le passif au futur, les faux positifs « Elle est allée » et attributs adjectivaux (« est susceptible », « est nécessaire »), l'invariant des positions sur `Sentence.analyse`, et le cas ambigu « La porte est ouverte » en `xfail` ; le modèle spaCy est chargé par une fixture de portée `session` |
 
 Depuis que les listes de mots sont en base, `test_rules.py` et `test_passif.py` se
@@ -393,10 +441,12 @@ avec `amorcer_lexiques()` — la fonction même qu'utilise `flask seed`. Aucun t
 touche la base réelle. `client` s'appuie sur la même fixture : les tests de la route
 voient donc les mêmes listes que le moteur.
 
-État au 21 septembre : 39 tests passent, plus le `xfail` assumé, en moins de 3 secondes.
+État au 23 septembre : 48 tests passent, plus le `xfail` assumé, en moins de 3 secondes.
 
 **Manque encore** : `test_normalization.py`, qui doit couvrir les six transformations de
-`normalize()`.
+`normalize()`, et un test d'échappement sur `<`, `>` et `&`. L'échappement a été vérifié à
+la main le 23/09 — `<script>` ressort en `&lt;script&gt;`, le `<mark>` d'un connecteur voisin
+reste intact —, mais aucun test ne le garde.
 
 Les fichiers de `exemples/` servent la démonstration, pas les tests : un texte de
 notification administrative dans les quatre formats acceptés. Le `.txt` est enregistré
@@ -430,7 +480,8 @@ import de fichiers, tokenisation fine, deux règles de plus.
 Les points 1 à 3 sont tenus. Restent la tokenisation fine, les deux règles
 supplémentaires et le script d'amorce : ils entrent dans l'ordre de sacrifice ci-dessous.
 
-**Phase 3 — en cours** (lun 21 → ven 25/09) : durcissement, puis connexion à la base.
+**Phase 3 — fonctionnalités gelées le mer 23/09**, deux jours avant la date prévue :
+durcissement, puis connexion à la base.
 - ✅ texte vide refusé côté serveur ; format non pris en charge, fichier corrompu et
   encodage non reconnu affichés dans le bandeau d'erreur
 - ✅ erreur 413 : `app_errorhandler` rend la page du formulaire avec son bandeau
@@ -439,16 +490,25 @@ supplémentaires et le script d'amorce : ils entrent dans l'ordre de sacrifice c
 - ✅ `MAX_FORM_MEMORY_SIZE` aligné sur `MAX_CONTENT_LENGTH` dans `config.py`
 - ⬜ `tests/test_normalization.py`
 - ✅ documentation technique et diaporama de soutenance (`docs/soutenance.pptx`)
-- ⬜ enregistrement des analyses : `DocumentRecord`, `Analysis`, `FindingRecord`
+- ✅ 23/09 : enregistrement des analyses à la demande, sous un nom ; liste et relecture
+  à l'identique ; `tests/test_historique.py`
+- ✅ 23/09 : mise en forme revue — `style.css` en onze sections avec variables de
+  couleur, les 153 déclarations restées identiques ; lignes vides et indentation
 - ✅ connecteurs lourds et verbes conjugués avec *être* en base, amorcés par `flask seed`
 - ✅ écran des listes de mots : afficher, ajouter, supprimer ; menu commun
+- ✅ 22/09 : les deux registres passent en tables littérales, sans décorateur ; contrat
+  des extracteurs sorti dans `extraction/base.py`
+- ⬜ test de l'échappement HTML (vérifié à la main le 23/09)
 
 Le durcissement étant bouclé le 21/09, le reste de la semaine va à la connexion à la
 base. Ce choix avance deux lignes de l'ordre de sacrifice — la partie stockage de
 l'historique, et les listes de mots — au détriment de la quatrième règle, devenue
 facultative.
 
-Gel des fonctionnalités : vendredi 25 septembre au soir. Soutenance : lundi 28 septembre 2026.
+L'enregistrement des analyses fait, les fonctionnalités ont été **gelées le mercredi
+23 septembre**, deux jours avant la date prévue : la quatrième règle est abandonnée, et
+le temps gagné va aux tests manquants et à la répétition. Soutenance : lundi 28
+septembre 2026.
 
 ### Ordre de sacrifice si le retard s'installe
 
@@ -471,7 +531,10 @@ livrées, surlignage, détection du passif, durcissement, répétition.
 - « La porte est ouverte » et « Il est convaincu » peuvent être signalés comme passifs :
   spaCy étiquette le participe `VERB`, et état et passif restent ambigus pour cette
   heuristique.
-- La route n'enregistre pas les analyses en base.
+- **Enregistrer relance les règles.** Si une liste de mots change entre l'affichage et
+  le clic sur *Enregistrer*, les signalements enregistrés ne sont pas ceux qui étaient
+  affichés. Et le résumé d'une analyse relue part des règles actives aujourd'hui : une
+  règle ajoutée depuis y apparaîtrait avec un zéro qu'elle n'a jamais calculé.
 - **Base migrée mais non amorcée : aucune erreur, des signalements en moins.**
   `lire_liste()` renvoie un dict vide pour une liste absente — c'est ce qui protège une
   langue non couverte du `KeyError`. Mais sur une base où l'on a oublié `flask seed`, le

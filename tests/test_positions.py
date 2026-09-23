@@ -1,4 +1,4 @@
-from app.services.document import build_document
+from app.services.ingestion.document import build_document
 
 
 def test_positions_absolues():

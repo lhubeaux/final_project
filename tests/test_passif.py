@@ -1,13 +1,12 @@
 import pytest
 
-from app.services.document import build_document
-from app.services.linguistics import modele
+from app.services.ingestion.document import build_document
+from app.services.ingestion.linguistics import modele
 from app.services.rules.fr import Passif
 
 
 # La règle lit la liste des verbes conjugués avec être en base.
 pytestmark = pytest.mark.usefixtures("base_amorcee")
-
 
 
 @pytest.fixture(scope="session")
